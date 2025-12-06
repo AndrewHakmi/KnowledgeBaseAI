@@ -19,7 +19,15 @@ from neo4j_utils import (
     build_user_roadmap,
 )
 
-app = FastAPI()
+app = FastAPI(
+    title="KnowledgeBaseAI API",
+    description=(
+        "Единая база знаний (Neo4j) с персонализацией."
+        "\nГлобальные статичные веса и динамичные веса; пользовательские веса не изменяют первичные данные."
+        "\nЭндпоинты поддерживают глобальные и персональные сценарии обучения."
+    ),
+    version="1.0.0",
+)
 
 
 class TestResult(BaseModel):
@@ -47,7 +55,12 @@ def startup_event():
     driver.close()
 
 
-@app.post("/test_result")
+@app.post("/test_result", summary="Обновить результат теста темы", description=(
+    "Обновляет динамичный вес темы."
+    "\nЕсли передан user_id — обновляет пользовательскую связь User-[:PROGRESS_TOPIC]->Topic;"
+    " иначе — глобальный dynamic_weight темы."
+    "\nПосле обновления пересчитывает adaptive_weight на связях Skill-[:LINKED]->Method."
+))
 def submit_test_result(payload: TestResult) -> Dict:
     try:
         if payload.user_id:
@@ -60,7 +73,12 @@ def submit_test_result(payload: TestResult) -> Dict:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/skill_test_result")
+@app.post("/skill_test_result", summary="Обновить результат теста навыка", description=(
+    "Обновляет динамичный вес навыка."
+    "\nЕсли передан user_id — обновляет пользовательскую связь User-[:PROGRESS_SKILL]->Skill;"
+    " иначе — глобальный dynamic_weight навыка."
+    "\nПосле обновления пересчитывает adaptive_weight на связях Skill-[:LINKED]->Method."
+))
 def submit_skill_test_result(payload: SkillTestResult) -> Dict:
     try:
         if payload.user_id:
@@ -73,7 +91,10 @@ def submit_skill_test_result(payload: SkillTestResult) -> Dict:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/knowledge_level/{topic_uid}")
+@app.get("/knowledge_level/{topic_uid}", summary="Уровень знаний по теме (глобально)", description=(
+    "Возвращает статичный и динамичный вес темы в глобальном графе."
+    "\nИспользуется для агрегированного обзора без персонализации."
+))
 def get_knowledge_level(topic_uid: str) -> Dict:
     try:
         lvl = get_current_knowledge_level(topic_uid)
@@ -82,7 +103,10 @@ def get_knowledge_level(topic_uid: str) -> Dict:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/skill_level/{skill_uid}")
+@app.get("/skill_level/{skill_uid}", summary="Уровень по навыку (глобально)", description=(
+    "Возвращает статичный и динамичный вес навыка в глобальном графе."
+    "\nИспользуется для агрегированного обзора без персонализации."
+))
 def get_skill_level(skill_uid: str) -> Dict:
     try:
         lvl = get_current_skill_level(skill_uid)
@@ -91,7 +115,10 @@ def get_skill_level(skill_uid: str) -> Dict:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.post("/roadmap")
+@app.post("/roadmap", summary="Глобальная дорожная карта обучения", description=(
+    "Строит список тем, навыков и методов, отсортированный по глобальному dynamic_weight темы."
+    "\nПараметры: subject_uid (опционально ограничивает предмет), limit (ограничение размера)."
+))
 def get_roadmap(payload: RoadmapRequest) -> Dict:
     try:
         items = build_adaptive_roadmap(payload.subject_uid, payload.limit)
@@ -100,7 +127,10 @@ def get_roadmap(payload: RoadmapRequest) -> Dict:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/user/knowledge_level/{user_id}/{topic_uid}")
+@app.get("/user/knowledge_level/{user_id}/{topic_uid}", summary="Уровень пользователя по теме", description=(
+    "Возвращает статичный вес темы и персональный dynamic_weight пользователя по теме"
+    " (если нет пользовательской записи, используется глобальный dynamic_weight/статичный вес)."
+))
 def get_user_knowledge_level(user_id: str, topic_uid: str) -> Dict:
     try:
         lvl = get_user_topic_level(user_id, topic_uid)
@@ -109,7 +139,10 @@ def get_user_knowledge_level(user_id: str, topic_uid: str) -> Dict:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/user/skill_level/{user_id}/{skill_uid}")
+@app.get("/user/skill_level/{user_id}/{skill_uid}", summary="Уровень пользователя по навыку", description=(
+    "Возвращает статичный вес навыка и персональный dynamic_weight пользователя по навыку"
+    " (если нет пользовательской записи, используется глобальный dynamic_weight/статичный вес)."
+))
 def get_user_skill_level(user_id: str, skill_uid: str) -> Dict:
     try:
         lvl = get_user_skill_level(user_id, skill_uid)
@@ -124,7 +157,10 @@ class UserRoadmapRequest(BaseModel):
     limit: int = 50
 
 
-@app.post("/user/roadmap")
+@app.post("/user/roadmap", summary="Персональная дорожная карта обучения", description=(
+    "Строит дорожную карту для пользователя: темы сортируются по персональному dynamic_weight."
+    "\nВозвращает темы с приоритетами, связанные навыки/методы с учетом пользовательских весов."
+))
 def get_user_roadmap(payload: UserRoadmapRequest) -> Dict:
     try:
         items = build_user_roadmap(payload.user_id, payload.subject_uid, payload.limit)
@@ -133,7 +169,10 @@ def get_user_roadmap(payload: UserRoadmapRequest) -> Dict:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/recompute_links")
+@app.post("/recompute_links", summary="Пересчитать adaptive_weight на связях LINKED", description=(
+    "Пересчитывает свойство adaptive_weight для всех связей Skill-[:LINKED]->Method"
+    " на основе текущих динамичных весов навыков (глобально или после обновлений пользователя)."
+))
 def recompute_links() -> Dict:
     try:
         stats = recompute_relationship_weights()

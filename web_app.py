@@ -33,6 +33,54 @@ def append_jsonl(filepath: str, record: Dict) -> None:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def rewrite_jsonl(filepath: str, records: List[Dict]) -> None:
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+def normalize_jsonl_file(filepath: str, kind: str) -> Dict:
+    if not os.path.exists(filepath):
+        return {'file': os.path.basename(filepath), 'exists': False, 'before': 0, 'after': 0}
+    with open(filepath, 'r', encoding='utf-8') as f:
+        text = f.read()
+    if text.find('}{') != -1:
+        text = text.replace('}{', '}\n{')
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    before = len(lines)
+    parsed: List[Dict] = []
+    for l in lines:
+        try:
+            parsed.append(json.loads(l))
+        except json.JSONDecodeError:
+            continue
+    if kind == 'skill_methods':
+        seen = set()
+        dedup = []
+        for r in parsed:
+            key = (r.get('skill_uid'), r.get('method_uid'))
+            if key in seen or key[0] is None or key[1] is None:
+                continue
+            seen.add(key)
+            dedup.append(r)
+        parsed = dedup
+    else:
+        seen = set()
+        dedup = []
+        for r in parsed:
+            uid = r.get('uid')
+            if not uid or uid in seen:
+                continue
+            if kind in {'subjects','sections','topics','skills','methods'} and not (r.get('title') or '').strip():
+                continue
+            seen.add(uid)
+            dedup.append(r)
+        parsed = dedup
+    rewrite_jsonl(filepath, parsed)
+    return {'file': os.path.basename(filepath), 'exists': True, 'before': before, 'after': len(parsed)}
+
+
 def build_graph(subject_filter: str | None = None) -> Dict:
     subjects = load_jsonl(os.path.join(KB_DIR, 'subjects.jsonl'))
     sections = load_jsonl(os.path.join(KB_DIR, 'sections.jsonl'))
@@ -231,6 +279,8 @@ def api_add_section():
     title = payload.get('title')
     description = payload.get('description', '')
     subject_uid = payload.get('subject_uid')
+    if not title or not subject_uid:
+        return jsonify({'ok': False, 'error': 'title and subject_uid are required'}), 400
     uid = payload.get('uid') or make_uid('SEC', title)
     record = {'uid': uid, 'subject_uid': subject_uid, 'title': title, 'description': description}
     append_jsonl(os.path.join(KB_DIR, 'sections.jsonl'), record)
@@ -243,6 +293,8 @@ def api_add_topic():
     title = payload.get('title')
     description = payload.get('description', '')
     section_uid = payload.get('section_uid')
+    if not title or not section_uid:
+        return jsonify({'ok': False, 'error': 'title and section_uid are required'}), 400
     uid = payload.get('uid') or make_uid('TOP', title)
     record = {
         'uid': uid,
@@ -264,6 +316,8 @@ def api_add_skill():
     title = payload.get('title')
     definition = payload.get('definition', '')
     subject_uid = payload.get('subject_uid')
+    if not title or not subject_uid:
+        return jsonify({'ok': False, 'error': 'title and subject_uid are required'}), 400
     uid = payload.get('uid') or make_uid('SKL', title)
     record = {'uid': uid, 'subject_uid': subject_uid, 'title': title, 'definition': definition}
     append_jsonl(os.path.join(KB_DIR, 'skills.jsonl'), record)
@@ -276,6 +330,8 @@ def api_add_method():
     title = payload.get('title')
     method_text = payload.get('method_text', '')
     applicability_types = payload.get('applicability_types', [])
+    if not title:
+        return jsonify({'ok': False, 'error': 'title is required'}), 400
     uid = payload.get('uid') or make_uid('MET', title)
     record = {'uid': uid, 'title': title, 'method_text': method_text, 'applicability_types': applicability_types}
     append_jsonl(os.path.join(KB_DIR, 'methods.jsonl'), record)
@@ -287,6 +343,8 @@ def api_add_topic_goal():
     payload = request.get_json(force=True)
     title = payload.get('title')
     topic_uid = payload.get('topic_uid')
+    if not title or not topic_uid:
+        return jsonify({'ok': False, 'error': 'title and topic_uid are required'}), 400
     uid = payload.get('uid') or make_uid('GOAL', title)
     record = {'uid': uid, 'topic_uid': topic_uid, 'title': title}
     append_jsonl(os.path.join(KB_DIR, 'topic_goals.jsonl'), record)
@@ -298,6 +356,8 @@ def api_add_topic_objective():
     payload = request.get_json(force=True)
     title = payload.get('title')
     topic_uid = payload.get('topic_uid')
+    if not title or not topic_uid:
+        return jsonify({'ok': False, 'error': 'title and topic_uid are required'}), 400
     uid = payload.get('uid') or make_uid('OBJ', title)
     record = {'uid': uid, 'topic_uid': topic_uid, 'title': title}
     append_jsonl(os.path.join(KB_DIR, 'topic_objectives.jsonl'), record)
@@ -312,6 +372,8 @@ def api_link_skill_method():
     weight = payload.get('weight', 'primary')
     confidence = float(payload.get('confidence', 0.9))
     is_auto_generated = bool(payload.get('is_auto_generated', False))
+    if not skill_uid or not method_uid:
+        return jsonify({'ok': False, 'error': 'skill_uid and method_uid are required'}), 400
     record = {
         'skill_uid': skill_uid,
         'method_uid': method_uid,
@@ -321,6 +383,56 @@ def api_link_skill_method():
     }
     append_jsonl(os.path.join(KB_DIR, 'skill_methods.jsonl'), record)
     return jsonify({'ok': True, 'record': record})
+
+
+@app.post('/api/normalize_kb')
+def api_normalize_kb():
+    files = [
+        ('subjects', os.path.join(KB_DIR, 'subjects.jsonl')),
+        ('sections', os.path.join(KB_DIR, 'sections.jsonl')),
+        ('topics', os.path.join(KB_DIR, 'topics.jsonl')),
+        ('skills', os.path.join(KB_DIR, 'skills.jsonl')),
+        ('methods', os.path.join(KB_DIR, 'methods.jsonl')),
+        ('skill_methods', os.path.join(KB_DIR, 'skill_methods.jsonl')),
+        ('topic_goals', os.path.join(KB_DIR, 'topic_goals.jsonl')),
+        ('topic_objectives', os.path.join(KB_DIR, 'topic_objectives.jsonl')),
+    ]
+    stats = [normalize_jsonl_file(path, kind) for kind, path in files]
+    return jsonify({'ok': True, 'stats': stats})
+
+
+@app.post('/api/delete_record')
+def api_delete_record():
+    payload = request.get_json(force=True)
+    kind = payload.get('type')
+    uid = payload.get('uid')
+    skill_uid = payload.get('skill_uid')
+    method_uid = payload.get('method_uid')
+    mapping = {
+        'subjects': 'subjects.jsonl',
+        'sections': 'sections.jsonl',
+        'topics': 'topics.jsonl',
+        'skills': 'skills.jsonl',
+        'methods': 'methods.jsonl',
+        'skill_methods': 'skill_methods.jsonl',
+        'topic_goals': 'topic_goals.jsonl',
+        'topic_objectives': 'topic_objectives.jsonl',
+    }
+    if kind not in mapping:
+        return jsonify({'ok': False, 'error': 'invalid type'}), 400
+    filepath = os.path.join(KB_DIR, mapping[kind])
+    data = load_jsonl(filepath)
+    before = len(data)
+    if kind == 'skill_methods':
+        if not skill_uid or not method_uid:
+            return jsonify({'ok': False, 'error': 'skill_uid and method_uid are required'}), 400
+        data = [r for r in data if not (r.get('skill_uid') == skill_uid and r.get('method_uid') == method_uid)]
+    else:
+        if not uid:
+            return jsonify({'ok': False, 'error': 'uid is required'}), 400
+        data = [r for r in data if r.get('uid') != uid]
+    rewrite_jsonl(filepath, data)
+    return jsonify({'ok': True, 'removed': before - len(data), 'remaining': len(data)})
 
 
 @app.post('/api/neo4j_sync')

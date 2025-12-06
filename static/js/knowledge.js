@@ -120,10 +120,26 @@ async function bindActions() {
     await axios.post('/api/topic_objectives', payload);
     await renderGraph();
   });
+
+  $('syncNeo4jBtn').addEventListener('click', async () => {
+    const { data } = await axios.post('/api/neo4j_sync');
+    $('analysisOut').textContent = JSON.stringify(data, null, 2);
+    await renderGraph();
+  });
+
+  $('normalizeKbBtn').addEventListener('click', async () => {
+    const { data } = await axios.post('/api/normalize_kb');
+    $('analysisOut').textContent = JSON.stringify(data, null, 2);
+    await renderGraph();
+  });
+
+  $('analyzeBtn').addEventListener('click', async () => {
+    const { data } = await axios.get('/api/analysis');
+    $('analysisOut').textContent = JSON.stringify(data, null, 2);
+  });
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
   await bindActions();
   await renderGraph();
 });
-
