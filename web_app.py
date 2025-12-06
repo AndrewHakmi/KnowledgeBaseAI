@@ -4,6 +4,7 @@ from typing import List, Dict
 
 from flask import Flask, jsonify, request, render_template, redirect, url_for
 from neo4j_utils import build_graph_from_neo4j, analyze_knowledge, sync_from_jsonl
+from neo4j_utils import list_items, get_node_details
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -505,6 +506,22 @@ def api_normalize_kb():
     ]
     stats = [normalize_jsonl_file(path, kind) for kind, path in files]
     return jsonify({'ok': True, 'stats': stats})
+
+
+@app.get('/api/list')
+def api_list():
+    kind = request.args.get('kind')
+    subject_uid = request.args.get('subject_uid')
+    section_uid = request.args.get('section_uid')
+    rows = list_items(kind, subject_uid, section_uid)
+    return jsonify({'ok': True, 'items': rows})
+
+
+@app.get('/api/node_details')
+def api_node_details():
+    uid = request.args.get('uid')
+    details = get_node_details(uid)
+    return jsonify({'ok': True, 'details': details})
 
 
 @app.post('/api/delete_record')

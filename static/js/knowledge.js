@@ -39,12 +39,12 @@ async function renderGraph() {
     style: [
       { selector: 'node', style: {
         'background-color': ele => typeColor(ele.data('type')),
-        'label': 'data(label)',
+        'label': '',
         'color': '#e6edf3',
         'text-outline-color': '#0a0c10',
         'text-outline-width': 2,
-        'width': 'mapData(type, 0, 0, 24, 24)',
-        'height': 'mapData(type, 0, 0, 24, 24)'
+        'width': 'mapData(type, 0, 0, 28, 28)',
+        'height': 'mapData(type, 0, 0, 28, 28)'
       }},
       { selector: 'edge', style: {
         'line-color': '#78839a',
@@ -53,14 +53,73 @@ async function renderGraph() {
         'target-arrow-shape': 'triangle',
         'target-arrow-color': '#78839a',
         'line-style': ele => relStyle(ele.data('rel')),
+        'opacity': 0.35
       }}
     ],
-    layout: { name: 'cose', padding: 30, nodeRepulsion: 50000 }
+    layout: { name: 'cose', padding: 48, nodeRepulsion: 90000 }
   });
 
   cy.on('tap', 'node', (evt) => {
     const d = evt.target.data();
-    console.info('Node clicked:', d);
+    axios.get('/api/node_details', { params: { uid: d.id } }).then(({ data }) => {
+      $('analysisOut').textContent = JSON.stringify(data.details, null, 2);
+    });
+  });
+
+  function updateLabels() {
+    const show = cy.zoom() >= 1.1;
+    cy.nodes().forEach(n => n.style('label', show ? n.data('label') : ''));
+  }
+  updateLabels();
+  cy.on('zoom', updateLabels);
+
+  function applyFilters() {
+    const allowed = new Set();
+    if ($('cbSubject').checked) allowed.add('subject');
+    if ($('cbSection').checked) allowed.add('section');
+    if ($('cbTopic').checked) allowed.add('topic');
+    if ($('cbSkill').checked) allowed.add('skill');
+    if ($('cbMethod').checked) allowed.add('method');
+    if ($('cbGoal').checked) allowed.add('goal');
+    if ($('cbObjective').checked) allowed.add('objective');
+    cy.nodes().forEach(n => {
+      const show = allowed.has(n.data('type'));
+      n.style('display', show ? 'element' : 'none');
+    });
+    cy.edges().forEach(e => {
+      const s = cy.getElementById(e.data('source'));
+      const t = cy.getElementById(e.data('target'));
+      const show = s.style('display') !== 'none' && t.style('display') !== 'none';
+      e.style('display', show ? 'element' : 'none');
+    });
+  }
+
+  ['cbSubject','cbSection','cbTopic','cbSkill','cbMethod','cbGoal','cbObjective'].forEach(id => {
+    $(id).addEventListener('change', applyFilters);
+  });
+
+  $('degreeSlider').addEventListener('input', () => {
+    const deg = parseInt($('degreeSlider').value, 10);
+    $('degreeValue').textContent = String(deg);
+    cy.nodes().forEach(n => {
+      const k = n.connectedEdges().length;
+      n.style('display', k >= deg ? 'element' : 'none');
+    });
+    cy.edges().forEach(e => {
+      const s = cy.getElementById(e.data('source'));
+      const t = cy.getElementById(e.data('target'));
+      const show = s.style('display') !== 'none' && t.style('display') !== 'none';
+      e.style('display', show ? 'element' : 'none');
+    });
+  });
+
+  $('searchBtn').addEventListener('click', () => {
+    const q = $('searchBox').value.trim().toLowerCase();
+    cy.nodes().forEach(n => {
+      const match = (n.data('label') || '').toLowerCase().includes(q);
+      n.style('border-width', match ? 3 : 0);
+      n.style('border-color', match ? '#f5a623' : '#000');
+    });
   });
 }
 
@@ -136,6 +195,32 @@ async function bindActions() {
   $('analyzeBtn').addEventListener('click', async () => {
     const { data } = await axios.get('/api/analysis');
     $('analysisOut').textContent = JSON.stringify(data, null, 2);
+  });
+  // Populate selects via list endpoints
+  const subjSel = $('sectionSubject');
+  const skSubjSel = $('skillSubject');
+  axios.get('/api/list', { params: { kind: 'subjects' } }).then(({ data }) => {
+    const items = data.items || [];
+    subjSel.innerHTML = items.map(it => `<option value="${it.uid}">${it.title}</option>`).join('');
+    skSubjSel.innerHTML = subjSel.innerHTML;
+    // fill sections of selected subject
+    const su = subjSel.value;
+    axios.get('/api/list', { params: { kind: 'sections', subject_uid: su } }).then(({ data }) => {
+      $('topicSection').innerHTML = (data.items || []).map(it => `<option value="${it.uid}">${it.title}</option>`).join('');
+    });
+    // skills and methods for linking
+    axios.get('/api/list', { params: { kind: 'skills', subject_uid: su } }).then(({ data }) => {
+      $('linkSkill').innerHTML = (data.items || []).map(it => `<option value="${it.uid}">${it.title}</option>`).join('');
+    });
+    axios.get('/api/list', { params: { kind: 'methods' } }).then(({ data }) => {
+      $('linkMethod').innerHTML = (data.items || []).map(it => `<option value="${it.uid}">${it.title}</option>`).join('');
+    });
+    // topics for goals/objectives
+    axios.get('/api/list', { params: { kind: 'topics' } }).then(({ data }) => {
+      const opts = (data.items || []).map(it => `<option value="${it.uid}">${it.title}</option>`).join('');
+      $('goalTopic').innerHTML = opts;
+      $('objTopic').innerHTML = opts;
+    });
   });
 }
 

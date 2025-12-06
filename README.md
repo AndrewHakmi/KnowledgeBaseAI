@@ -117,6 +117,46 @@ requirements.txt        # Зависимости (Flask, FastAPI, Neo4j и др.
 ## Переменные окружения
 
 - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` — доступ к Neo4j (обязательные)
+- `KB_DOMAIN`, `KB_ALT_DOMAIN` — домены для UI (`kb.studyninja.ru`, `kb.xteam.pro`)
+- `LETSENCRYPT_EMAIL` — email для Let’s Encrypt
+
+### .env
+
+Файл `.env` использует ссылки на локальные переменные, экспортируемые в окружение системы. Пример:
+
+```
+KB_DOMAIN=${KB_DOMAIN_VALUE}
+KB_ALT_DOMAIN=${KB_ALT_DOMAIN_VALUE}
+LETSENCRYPT_EMAIL=${LE_EMAIL_VALUE}
+NEO4J_URI=${NEO4J_URI_VALUE}
+NEO4J_USER=${NEO4J_USER_VALUE}
+NEO4J_PASSWORD=${NEO4J_PASSWORD_VALUE}
+```
+
+Перед запуском экспортируйте реальные значения:
+
+```
+export KB_DOMAIN_VALUE=kb.studyninja.ru
+export KB_ALT_DOMAIN_VALUE=kb.xteam.pro
+export LE_EMAIL_VALUE=admin@example.com
+export NEO4J_URI_VALUE="REDACTED_NEO4J_URI"
+export NEO4J_USER_VALUE=neo4j
+export NEO4J_PASSWORD_VALUE=REDACTED_NEO4J_PASSWORD
+```
+
+Проверьте, что DNS записи указывают на IP сервера:
+
+- `kb.studyninja.ru`, `api.kb.studyninja.ru` → `A 185.233.3.14`
+- `kb.xteam.pro`, `api.kb.xteam.pro` → `A 185.233.3.14`
+
+### Запуск в контейнерах
+
+```
+docker compose build --no-cache
+docker compose up -d
+```
+
+Traefik выпустит сертификаты автоматически (HTTP‑challenge). Для HSTS/HTTPS убедитесь, что у поддоменов `api.*` есть корректные DNS записи.
 
 ## Развертывание
 

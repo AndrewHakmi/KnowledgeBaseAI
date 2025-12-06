@@ -49,7 +49,8 @@
 
         <div class="panel-block">
           <h2>Добавить тему</h2>
-          <input id="topicSection" placeholder="UID раздела (SEC-...)">
+          <label>Раздел</label>
+          <select id="topicSection"></select>
           <input id="topicTitle" placeholder="Название">
           <input id="topicDesc" placeholder="Описание">
           <button id="addTopicBtn">Создать</button>
@@ -57,14 +58,16 @@
 
         <div class="panel-block">
           <h2>Добавить цель темы</h2>
-          <input id="goalTopic" placeholder="UID темы (TOP-...)">
+          <label>Тема</label>
+          <select id="goalTopic"></select>
           <input id="goalTitle" placeholder="Формулировка цели">
           <button id="addTopicGoalBtn">Создать</button>
         </div>
 
         <div class="panel-block">
           <h2>Добавить задачу темы</h2>
-          <input id="objTopic" placeholder="UID темы (TOP-...)">
+          <label>Тема</label>
+          <select id="objTopic"></select>
           <input id="objTitle" placeholder="Формулировка задачи">
           <button id="addTopicObjectiveBtn">Создать</button>
         </div>
@@ -92,8 +95,10 @@
 
         <div class="panel-block">
           <h2>Связать навык ↔ метод</h2>
-          <input id="linkSkill" placeholder="UID навыка (SKL-...)">
-          <input id="linkMethod" placeholder="UID метода (MET-...)">
+          <label>Навык</label>
+          <select id="linkSkill"></select>
+          <label>Метод</label>
+          <select id="linkMethod"></select>
           <select id="linkWeight">
             <option value="primary">primary</option>
             <option value="secondary">secondary</option>
@@ -110,6 +115,30 @@
           <button id="syncNeo4jBtn">Синхронизировать в Neo4j</button>
           <button id="normalizeKbBtn">Нормализовать KB</button>
           <button id="analyzeBtn">Аналитика</button>
+        </div>
+        <div class="controls" style="margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div>
+            <label>Поиск по названию</label>
+            <div style="display:flex; gap:6px;">
+              <input id="searchBox" placeholder="Введите часть названия">
+              <button id="searchBtn">Найти</button>
+            </div>
+            <label style="display:block; margin-top:8px;">Порог степени узла</label>
+            <input id="degreeSlider" type="range" min="0" max="6" value="0">
+            <span id="degreeValue">0</span>
+          </div>
+          <div>
+            <label>Фильтр типов</label>
+            <div class="type-filters">
+              <label><input type="checkbox" id="cbSubject" checked> subject</label>
+              <label><input type="checkbox" id="cbSection" checked> section</label>
+              <label><input type="checkbox" id="cbTopic" checked> topic</label>
+              <label><input type="checkbox" id="cbSkill" checked> skill</label>
+              <label><input type="checkbox" id="cbMethod" checked> method</label>
+              <label><input type="checkbox" id="cbGoal" checked> goal</label>
+              <label><input type="checkbox" id="cbObjective" checked> objective</label>
+            </div>
+          </div>
         </div>
         <pre id="analysisOut" style="margin-top:8px; padding:8px; border:1px solid #1f2328; border-radius:6px; background:#0f1318; max-height:200px; overflow:auto;"></pre>
       </section>

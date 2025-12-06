@@ -539,6 +539,70 @@ def complete_user_skill(user_id: str, skill_uid: str, time_spent_sec: float, err
     return {"ok": True}
 
 
+def list_items(kind: str, subject_uid: str | None = None, section_uid: str | None = None) -> List[Dict]:
+    repo = Neo4jRepo()
+    if kind == 'subjects':
+        rows = repo.read("MATCH (s:Subject) RETURN s.uid AS uid, s.title AS title ORDER BY s.title")
+    elif kind == 'sections':
+        if subject_uid:
+            rows = repo.read("MATCH (sub:Subject {uid:$su})-[:CONTAINS]->(sec:Section) RETURN sec.uid AS uid, sec.title AS title ORDER BY sec.title", {"su": subject_uid})
+        else:
+            rows = repo.read("MATCH (sec:Section) RETURN sec.uid AS uid, sec.title AS title ORDER BY sec.title")
+    elif kind == 'topics':
+        if section_uid:
+            rows = repo.read("MATCH (sec:Section {uid:$se})-[:CONTAINS]->(t:Topic) RETURN t.uid AS uid, t.title AS title ORDER BY t.title", {"se": section_uid})
+        else:
+            rows = repo.read("MATCH (t:Topic) RETURN t.uid AS uid, t.title AS title ORDER BY t.title")
+    elif kind == 'skills':
+        if subject_uid:
+            rows = repo.read("MATCH (sub:Subject {uid:$su})-[:HAS_SKILL]->(sk:Skill) RETURN sk.uid AS uid, sk.title AS title ORDER BY sk.title", {"su": subject_uid})
+        else:
+            rows = repo.read("MATCH (sk:Skill) RETURN sk.uid AS uid, sk.title AS title ORDER BY sk.title")
+    elif kind == 'methods':
+        rows = repo.read("MATCH (m:Method) RETURN m.uid AS uid, m.title AS title ORDER BY m.title")
+    else:
+        rows = []
+    repo.close()
+    return rows
+
+
+def get_node_details(uid: str) -> Dict:
+    repo = Neo4jRepo()
+    rows = repo.read("MATCH (n) WHERE n.uid=$uid RETURN labels(n) AS labels, n.title AS title", {"uid": uid})
+    if not rows:
+        repo.close()
+        return {"found": False}
+    labels = rows[0]['labels']
+    typ = labels[0] if labels else None
+    details: Dict = {"found": True, "type": typ, "uid": uid, "title": rows[0]['title']}
+    if typ == 'Topic':
+        wrows = repo.read("MATCH (t:Topic {uid:$uid}) RETURN t.static_weight AS sw, t.dynamic_weight AS dw", {"uid": uid})
+        if wrows:
+            details["static_weight"] = wrows[0]['sw']
+            details["dynamic_weight"] = wrows[0]['dw']
+        g = repo.read("MATCH (t:Topic {uid:$uid})-[:TARGETS]->(g) RETURN g.uid AS uid, g.title AS title, labels(g)[0] AS label", {"uid": uid})
+        details["targets"] = [{"uid": r['uid'], "title": r['title'], "type": ('objective' if r['label'] == 'Objective' else 'goal')} for r in g]
+        pr = repo.read("MATCH (t:Topic {uid:$uid})-[:PREREQ]->(p:Topic) RETURN p.uid AS uid, p.title AS title", {"uid": uid})
+        details["prereqs"] = pr
+    elif typ == 'Skill':
+        wrows = repo.read("MATCH (s:Skill {uid:$uid}) RETURN s.static_weight AS sw, s.dynamic_weight AS dw", {"uid": uid})
+        if wrows:
+            details["static_weight"] = wrows[0]['sw']
+            details["dynamic_weight"] = wrows[0]['dw']
+        lm = repo.read("MATCH (s:Skill {uid:$uid})-[r:LINKED]->(m:Method) RETURN m.uid AS uid, m.title AS title, r.weight AS weight", {"uid": uid})
+        details["linked_methods"] = lm
+    elif typ == 'Section':
+        t = repo.read("MATCH (sec:Section {uid:$uid})-[:CONTAINS]->(t:Topic) RETURN t.uid AS uid, t.title AS title", {"uid": uid})
+        details["topics"] = t
+    elif typ == 'Subject':
+        sec = repo.read("MATCH (s:Subject {uid:$uid})-[:CONTAINS]->(sec:Section) RETURN sec.uid AS uid, sec.title AS title", {"uid": uid})
+        sk = repo.read("MATCH (s:Subject {uid:$uid})-[:HAS_SKILL]->(sk:Skill) RETURN sk.uid AS uid, sk.title AS title", {"uid": uid})
+        details["sections"] = sec
+        details["skills"] = sk
+    repo.close()
+    return details
+
+
 def fix_orphan_section(section_uid: str, subject_uid: str) -> Dict:
     driver = get_driver()
     with driver.session() as session:
