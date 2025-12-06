@@ -2,6 +2,7 @@ import os
 import json
 from typing import Dict, List
 from neo4j import GraphDatabase
+from neo4j_repo import Neo4jRepo
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 KB_DIR = os.path.join(BASE_DIR, 'kb')
@@ -383,9 +384,9 @@ def recompute_relationship_weights() -> Dict:
 
 
 def update_user_topic_weight(user_id: str, topic_uid: str, score: float) -> Dict:
-    driver = get_driver()
+    repo = Neo4jRepo()
     delta = (50.0 - float(score)) / 100.0
-    with driver.session() as session:
+    with repo.driver.session() as session:
         ensure_weight_defaults(session)
         ensure_user_profile(session, user_id)
         cur = session.run(
@@ -418,14 +419,14 @@ def update_user_topic_weight(user_id: str, topic_uid: str, score: float) -> Dict
             "MATCH (:User {id:$uid})-[r:PROGRESS_TOPIC]->(t:Topic {uid:$tuid}) SET r.dynamic_weight = $dw",
             uid=user_id, tuid=topic_uid, dw=new_dw
         )
-    driver.close()
+    repo.close()
     return {'uid': topic_uid, 'user_id': user_id, 'title': title, 'dynamic_weight': new_dw}
 
 
 def update_user_skill_weight(user_id: str, skill_uid: str, score: float) -> Dict:
-    driver = get_driver()
+    repo = Neo4jRepo()
     delta = (50.0 - float(score)) / 100.0
-    with driver.session() as session:
+    with repo.driver.session() as session:
         ensure_weight_defaults(session)
         ensure_user_profile(session, user_id)
         cur = session.run(
@@ -458,7 +459,7 @@ def update_user_skill_weight(user_id: str, skill_uid: str, score: float) -> Dict
             "MATCH (:User {id:$uid})-[r:PROGRESS_SKILL]->(s:Skill {uid:$suid}) SET r.dynamic_weight = $dw",
             uid=user_id, suid=skill_uid, dw=new_dw
         )
-    driver.close()
+    repo.close()
     return {'uid': skill_uid, 'user_id': user_id, 'title': title, 'dynamic_weight': new_dw}
 
 
