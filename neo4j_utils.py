@@ -160,65 +160,64 @@ def sync_from_jsonl() -> Dict:
 
 
 def build_graph_from_neo4j(subject_filter: str | None = None) -> Dict:
-    driver = get_driver()
+    repo = Neo4jRepo()
+    params = {"uid": subject_filter}
+    rows = repo.read(
+        """
+        WITH $uid AS filter
+        MATCH (s:Subject)
+        WHERE filter IS NULL OR s.uid = filter
+        WITH collect(s.uid) AS subj_uids,
+             collect({id:s.uid, label:s.title, type:'subject'}) AS subjects
+        MATCH (s:Subject)-[:CONTAINS]->(sec:Section)
+        WHERE s.uid IN subj_uids
+        WITH subj_uids, subjects,
+             collect(sec.uid) AS section_uids,
+             collect({id:sec.uid, label:sec.title, type:'section'}) AS sections,
+             collect({id:s.uid+'->'+sec.uid, source:s.uid, target:sec.uid, rel:'contains'}) AS sec_edges
+        MATCH (sec:Section)-[:CONTAINS]->(t:Topic)
+        WHERE sec.uid IN section_uids
+        WITH subj_uids, subjects, sections, sec_edges,
+             collect(t.uid) AS topic_uids,
+             collect({id:t.uid, label:t.title, type:'topic'}) AS topics,
+             collect({id:sec.uid+'->'+t.uid, source:sec.uid, target:t.uid, rel:'contains'}) AS topic_edges
+        MATCH (t:Topic)-[:TARGETS]->(g)
+        WHERE t.uid IN topic_uids
+        WITH subj_uids, subjects, sections, topics, sec_edges, topic_edges,
+             collect({id:g.uid, label:g.title, type:CASE WHEN 'Objective' IN labels(g) THEN 'objective' ELSE 'goal' END}) AS target_nodes,
+             collect({id:t.uid+'->'+g.uid, source:t.uid, target:g.uid, rel:'targets'}) AS target_edges
+        MATCH (s:Subject)-[:HAS_SKILL]->(sk:Skill)
+        WHERE s.uid IN subj_uids
+        WITH subj_uids, subjects, sections, topics, target_nodes, sec_edges, topic_edges, target_edges,
+             collect({id:sk.uid, label:sk.title, type:'skill'}) AS skills,
+             collect({id:s.uid+'->'+sk.uid, source:s.uid, target:sk.uid, rel:'has_skill'}) AS skill_edges
+        MATCH (sk:Skill)-[r:LINKED]->(m:Method)
+        WITH subjects, sections, topics, target_nodes, skills, sec_edges, topic_edges, target_edges, skill_edges,
+             collect({id:m.uid, label:m.title, type:'method'}) AS methods,
+             collect({id:sk.uid+'->'+m.uid, source:sk.uid, target:m.uid, rel:coalesce(r.weight,'linked')}) AS method_edges
+        RETURN subjects, sections, topics, target_nodes, skills, methods, sec_edges, topic_edges, target_edges, skill_edges, method_edges
+        """,
+        params
+    )
+    repo.close()
+    if not rows:
+        return {"nodes": [], "edges": []}
+    rec = rows[0]
     nodes = []
     edges = []
-    with driver.session() as session:
-        subj_uids: List[str] = []
-        if subject_filter:
-            res = session.run("MATCH (s:Subject {uid:$uid}) RETURN s.uid AS uid, s.title AS title", uid=subject_filter)
-            for rec in res:
-                nodes.append({'data': {'id': rec['uid'], 'label': rec['title'], 'type': 'subject'}})
-                subj_uids.append(rec['uid'])
-        else:
-            res = session.run("MATCH (s:Subject) RETURN s.uid AS uid, s.title AS title")
-            for rec in res:
-                nodes.append({'data': {'id': rec['uid'], 'label': rec['title'], 'type': 'subject'}})
-                subj_uids.append(rec['uid'])
-
-        res = session.run(
-            "MATCH (s:Subject)-[:CONTAINS]->(sec:Section) WHERE s.uid IN $uids RETURN s.uid AS su, sec.uid AS uid, sec.title AS title",
-            uids=subj_uids
-        )
-        allowed_sections = set()
-        for rec in res:
-            allowed_sections.add(rec['uid'])
-            nodes.append({'data': {'id': rec['uid'], 'label': rec['title'], 'type': 'section'}})
-            edges.append({'data': {'id': f"{rec['su']}->{rec['uid']}", 'source': rec['su'], 'target': rec['uid'], 'rel': 'contains'}})
-
-        res = session.run(
-            "MATCH (sec:Section)-[:CONTAINS]->(t:Topic) WHERE sec.uid IN $uids RETURN sec.uid AS su, t.uid AS uid, t.title AS title",
-            uids=list(allowed_sections)
-        )
-        topic_uids = set()
-        for rec in res:
-            topic_uids.add(rec['uid'])
-            nodes.append({'data': {'id': rec['uid'], 'label': rec['title'], 'type': 'topic'}})
-            edges.append({'data': {'id': f"{rec['su']}->{rec['uid']}", 'source': rec['su'], 'target': rec['uid'], 'rel': 'contains'}})
-
-        res = session.run(
-            "MATCH (t:Topic)-[:TARGETS]->(g) WHERE t.uid IN $uids RETURN t.uid AS tuid, labels(g)[0] AS label, g.uid AS uid, g.title AS title",
-            uids=list(topic_uids)
-        )
-        for rec in res:
-            typ = 'objective' if rec['label'] == 'Objective' else 'goal'
-            nodes.append({'data': {'id': rec['uid'], 'label': rec['title'], 'type': typ}})
-            edges.append({'data': {'id': f"{rec['tuid']}->{rec['uid']}", 'source': rec['tuid'], 'target': rec['uid'], 'rel': 'targets'}})
-
-        res = session.run(
-            "MATCH (s:Subject)-[:HAS_SKILL]->(sk:Skill) WHERE s.uid IN $uids RETURN s.uid AS su, sk.uid AS uid, sk.title AS title",
-            uids=subj_uids
-        )
-        for rec in res:
-            nodes.append({'data': {'id': rec['uid'], 'label': rec['title'], 'type': 'skill'}})
-            edges.append({'data': {'id': f"{rec['su']}->{rec['uid']}", 'source': rec['su'], 'target': rec['uid'], 'rel': 'has_skill'}})
-
-        res = session.run("MATCH (sk:Skill)-[r:LINKED]->(m:Method) RETURN sk.uid AS su, m.uid AS uid, m.title AS title, r.weight AS weight")
-        for rec in res:
-            nodes.append({'data': {'id': rec['uid'], 'label': rec['title'], 'type': 'method'}})
-            edges.append({'data': {'id': f"{rec['su']}->{rec['uid']}", 'source': rec['su'], 'target': rec['uid'], 'rel': rec['weight'] or 'linked'}})
-
-    driver.close()
+    for lst, t in [
+        (rec.get('subjects', []), None),
+        (rec.get('sections', []), None),
+        (rec.get('topics', []), None),
+        (rec.get('target_nodes', []), None),
+        (rec.get('skills', []), None),
+        (rec.get('methods', []), None),
+    ]:
+        for n in lst:
+            nodes.append({'data': {'id': n['id'], 'label': n['label'], 'type': n['type']}})
+    for lst in [rec.get('sec_edges', []), rec.get('topic_edges', []), rec.get('target_edges', []), rec.get('skill_edges', []), rec.get('method_edges', [])]:
+        for e in lst:
+            edges.append({'data': {'id': e['id'], 'source': e['source'], 'target': e['target'], 'rel': e['rel']}})
     return {'nodes': nodes, 'edges': edges}
 
 

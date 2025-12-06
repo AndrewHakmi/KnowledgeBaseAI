@@ -38,8 +38,10 @@ class Neo4jRepo:
 
     def read(self, query: str, params: Dict | None = None) -> List[Dict]:
         def _fn(session):
-            res = session.execute_read(lambda tx: tx.run(query, **(params or {})))
-            return [dict(r) for r in res]
+            def reader(tx):
+                res = tx.run(query, **(params or {}))
+                return [dict(r) for r in res]
+            return session.execute_read(reader)
         return self._retry(_fn)
 
     def _chunks(self, rows: List[Dict], size: int) -> List[List[Dict]]:
