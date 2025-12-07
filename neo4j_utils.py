@@ -41,11 +41,15 @@ def ensure_constraints(session):
     session.run("CREATE CONSTRAINT method_uid_unique IF NOT EXISTS FOR (n:Method) REQUIRE n.uid IS UNIQUE")
     session.run("CREATE CONSTRAINT goal_uid_unique IF NOT EXISTS FOR (n:Goal) REQUIRE n.uid IS UNIQUE")
     session.run("CREATE CONSTRAINT objective_uid_unique IF NOT EXISTS FOR (n:Objective) REQUIRE n.uid IS UNIQUE")
+    session.run("CREATE CONSTRAINT example_uid_unique IF NOT EXISTS FOR (n:Example) REQUIRE n.uid IS UNIQUE")
+    session.run("CREATE CONSTRAINT error_uid_unique IF NOT EXISTS FOR (n:Error) REQUIRE n.uid IS UNIQUE")
     session.run("CREATE INDEX subject_title_idx IF NOT EXISTS FOR (n:Subject) ON (n.title)")
     session.run("CREATE INDEX section_title_idx IF NOT EXISTS FOR (n:Section) ON (n.title)")
     session.run("CREATE INDEX topic_title_idx IF NOT EXISTS FOR (n:Topic) ON (n.title)")
     session.run("CREATE INDEX skill_title_idx IF NOT EXISTS FOR (n:Skill) ON (n.title)")
     session.run("CREATE INDEX method_title_idx IF NOT EXISTS FOR (n:Method) ON (n.title)")
+    session.run("CREATE INDEX example_title_idx IF NOT EXISTS FOR (n:Example) ON (n.title)")
+    session.run("CREATE INDEX error_title_idx IF NOT EXISTS FOR (n:Error) ON (n.title)")
     session.run("CREATE CONSTRAINT section_title_scope_unique IF NOT EXISTS FOR (n:Section) REQUIRE (n.subject_uid, n.title) IS UNIQUE")
     session.run("CREATE CONSTRAINT topic_title_scope_unique IF NOT EXISTS FOR (n:Topic) REQUIRE (n.section_uid, n.title) IS UNIQUE")
     session.run("CREATE CONSTRAINT skill_title_scope_unique IF NOT EXISTS FOR (n:Skill) REQUIRE (n.subject_uid, n.title) IS UNIQUE")
@@ -81,8 +85,14 @@ def sync_from_jsonl() -> Dict:
     skills = _load_jsonl(os.path.join(KB_DIR, 'skills.jsonl'))
     methods = _load_jsonl(os.path.join(KB_DIR, 'methods.jsonl'))
     skill_methods = _load_jsonl(os.path.join(KB_DIR, 'skill_methods.jsonl'))
+    topic_skills = _load_jsonl(os.path.join(KB_DIR, 'topic_skills.jsonl'))
     topic_goals = _load_jsonl(os.path.join(KB_DIR, 'topic_goals.jsonl'))
     topic_objectives = _load_jsonl(os.path.join(KB_DIR, 'topic_objectives.jsonl'))
+    examples = _load_jsonl(os.path.join(KB_DIR, 'examples.jsonl'))
+    example_skills = _load_jsonl(os.path.join(KB_DIR, 'example_skills.jsonl'))
+    errors = _load_jsonl(os.path.join(KB_DIR, 'errors.jsonl'))
+    error_skills = _load_jsonl(os.path.join(KB_DIR, 'error_skills.jsonl'))
+    error_examples = _load_jsonl(os.path.join(KB_DIR, 'error_examples.jsonl'))
 
     repo = Neo4jRepo()
     with repo.driver.session() as session:
@@ -123,6 +133,10 @@ def sync_from_jsonl() -> Dict:
         [sk for sk in skills if sk.get('subject_uid')], 500
     )
     repo.write_unwind(
+        "UNWIND $rows AS r MATCH (t:Topic {uid:r.topic_uid}), (s:Skill {uid:r.skill_uid}) MERGE (t)-[:USES_SKILL]->(s)",
+        [ts for ts in topic_skills if ts.get('topic_uid') and ts.get('skill_uid')], 500
+    )
+    repo.write_unwind(
         "UNWIND $rows AS r MATCH (a:Skill {uid:r.skill_uid}), (b:Method {uid:r.method_uid}) MERGE (a)-[rel:LINKED]->(b) SET rel.weight=COALESCE(r.weight,'linked'), rel.confidence=COALESCE(r.confidence,0.9)",
         [sm for sm in skill_methods if sm.get('skill_uid') and sm.get('method_uid')], 500
     )
@@ -146,6 +160,32 @@ def sync_from_jsonl() -> Dict:
         [o for o in objs_rows if o.get('topic_uid')], 500
     )
 
+    repo.write_unwind(
+        "UNWIND $rows AS r MERGE (e:Example {uid:r.uid}) SET e.title=r.title, e.statement=COALESCE(r.statement,''), e.difficulty=COALESCE(r.difficulty,3)",
+        examples, 500
+    )
+    repo.write_unwind(
+        "UNWIND $rows AS r MATCH (t:Topic {uid:r.topic_uid}), (e:Example {uid:r.example_uid}) MERGE (t)-[:HAS_EXAMPLE]->(e)",
+        [ex for ex in examples if ex.get('topic_uid') and ex.get('uid')], 500
+    )
+    repo.write_unwind(
+        "UNWIND $rows AS r MATCH (e:Example {uid:r.example_uid}), (s:Skill {uid:r.skill_uid}) MERGE (e)-[rel:CHECKS]->(s) SET rel.role=COALESCE(r.role,'target')",
+        [es for es in example_skills if es.get('example_uid') and es.get('skill_uid')], 500
+    )
+
+    repo.write_unwind(
+        "UNWIND $rows AS r MERGE (er:Error {uid:r.uid}) SET er.title=r.title, er.error_text=COALESCE(r.error_text,''), er.triggers=COALESCE(r.triggers,[])",
+        errors, 500
+    )
+    repo.write_unwind(
+        "UNWIND $rows AS r MATCH (er:Error {uid:r.error_uid}), (s:Skill {uid:r.skill_uid}) MERGE (er)-[:RELATES_TO]->(s)",
+        [es for es in error_skills if es.get('error_uid') and es.get('skill_uid')], 500
+    )
+    repo.write_unwind(
+        "UNWIND $rows AS r MATCH (er:Error {uid:r.error_uid}), (e:Example {uid:r.example_uid}) MERGE (er)-[:OBSERVED_IN]->(e)",
+        [ee for ee in error_examples if ee.get('error_uid') and ee.get('example_uid')], 500
+    )
+
     repo.close()
     return {
         'subjects': len(subjects),
@@ -154,8 +194,11 @@ def sync_from_jsonl() -> Dict:
         'skills': len(skills),
         'methods': len(methods),
         'skill_methods': len(skill_methods),
+        'topic_skills': len(topic_skills),
         'goals': len(topic_goals),
-        'objectives': len(topic_objectives)
+        'objectives': len(topic_objectives),
+        'examples': len(examples),
+        'errors': len(errors)
     }
 
 
@@ -343,14 +386,24 @@ def build_adaptive_roadmap(subject_uid: str | None = None, limit: int = 50) -> L
     for it in items:
         pr = 'high' if (it['dynamic_weight'] or 0.0) >= 0.7 else ('medium' if (it['dynamic_weight'] or 0.0) >= 0.4 else 'low')
         skills_rows = repo.read(
-            "MATCH (sub:Subject)-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic {uid:$uid}) MATCH (sub)-[:HAS_SKILL]->(sk:Skill) RETURN DISTINCT sk.uid AS uid, sk.title AS title, sk.static_weight AS sw, sk.dynamic_weight AS dw",
+            "MATCH (t:Topic {uid:$uid})-[:USES_SKILL]->(sk:Skill) RETURN DISTINCT sk.uid AS uid, sk.title AS title, sk.static_weight AS sw, sk.dynamic_weight AS dw",
             {"uid": it['uid']}
         )
+        if not skills_rows:
+            skills_rows = repo.read(
+                "MATCH (sub:Subject)-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic {uid:$uid}) MATCH (sub)-[:HAS_SKILL]->(sk:Skill) RETURN DISTINCT sk.uid AS uid, sk.title AS title, sk.static_weight AS sw, sk.dynamic_weight AS dw",
+                {"uid": it['uid']}
+            )
         skills = [{'uid': r['uid'], 'title': r['title'], 'static_weight': r['sw'], 'dynamic_weight': r['dw']} for r in skills_rows]
         method_rows = repo.read(
-            "MATCH (sub:Subject)-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic {uid:$uid}) MATCH (sub)-[:HAS_SKILL]->(sk:Skill)-[:LINKED]->(m:Method) RETURN DISTINCT m.uid AS uid, m.title AS title",
+            "MATCH (t:Topic {uid:$uid})-[:USES_SKILL]->(sk:Skill)-[:LINKED]->(m:Method) RETURN DISTINCT m.uid AS uid, m.title AS title",
             {"uid": it['uid']}
         )
+        if not method_rows:
+            method_rows = repo.read(
+                "MATCH (sub:Subject)-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic {uid:$uid}) MATCH (sub)-[:HAS_SKILL]->(sk:Skill)-[:LINKED]->(m:Method) RETURN DISTINCT m.uid AS uid, m.title AS title",
+                {"uid": it['uid']}
+            )
         methods = [{'uid': r['uid'], 'title': r['title']} for r in method_rows]
         roadmap.append({'topic': it, 'priority': pr, 'skills': skills, 'methods': methods})
     repo.close()
@@ -501,14 +554,24 @@ def build_user_roadmap(user_id: str, subject_uid: str | None = None, limit: int 
         if effective_dw < 0:
             effective_dw = 0.0
         skills_rows = repo.read(
-            "MATCH (sub:Subject)-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic {uid:$uid}) MATCH (sub)-[:HAS_SKILL]->(sk:Skill) OPTIONAL MATCH (:User {id:$u})-[r:PROGRESS_SKILL]->(sk) RETURN DISTINCT sk.uid AS uid, sk.title AS title, sk.static_weight AS sw, COALESCE(r.dynamic_weight, sk.dynamic_weight, sk.static_weight) AS dw",
+            "MATCH (t:Topic {uid:$uid})-[:USES_SKILL]->(sk:Skill) OPTIONAL MATCH (:User {id:$u})-[r:PROGRESS_SKILL]->(sk) RETURN DISTINCT sk.uid AS uid, sk.title AS title, sk.static_weight AS sw, COALESCE(r.dynamic_weight, sk.dynamic_weight, sk.static_weight) AS dw",
             {"uid": it['uid'], "u": user_id}
         )
+        if not skills_rows:
+            skills_rows = repo.read(
+                "MATCH (sub:Subject)-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic {uid:$uid}) MATCH (sub)-[:HAS_SKILL]->(sk:Skill) OPTIONAL MATCH (:User {id:$u})-[r:PROGRESS_SKILL]->(sk) RETURN DISTINCT sk.uid AS uid, sk.title AS title, sk.static_weight AS sw, COALESCE(r.dynamic_weight, sk.dynamic_weight, sk.static_weight) AS dw",
+                {"uid": it['uid'], "u": user_id}
+            )
         skills = [{'uid': r['uid'], 'title': r['title'], 'static_weight': r['sw'], 'dynamic_weight': r['dw']} for r in skills_rows]
         method_rows = repo.read(
-            "MATCH (sub:Subject)-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic {uid:$uid}) MATCH (sub)-[:HAS_SKILL]->(sk:Skill)-[lk:LINKED]->(m:Method) OPTIONAL MATCH (:User {id:$u})-[r:PROGRESS_SKILL]->(sk) RETURN DISTINCT m.uid AS uid, m.title AS title, COALESCE(r.dynamic_weight, sk.dynamic_weight, sk.static_weight) AS weight",
+            "MATCH (t:Topic {uid:$uid})-[:USES_SKILL]->(sk:Skill)-[lk:LINKED]->(m:Method) OPTIONAL MATCH (:User {id:$u})-[r:PROGRESS_SKILL]->(sk) RETURN DISTINCT m.uid AS uid, m.title AS title, COALESCE(r.dynamic_weight, sk.dynamic_weight, sk.static_weight) AS weight",
             {"uid": it['uid'], "u": user_id}
         )
+        if not method_rows:
+            method_rows = repo.read(
+                "MATCH (sub:Subject)-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic {uid:$uid}) MATCH (sub)-[:HAS_SKILL]->(sk:Skill)-[lk:LINKED]->(m:Method) OPTIONAL MATCH (:User {id:$u})-[r:PROGRESS_SKILL]->(sk) RETURN DISTINCT m.uid AS uid, m.title AS title, COALESCE(r.dynamic_weight, sk.dynamic_weight, sk.static_weight) AS weight",
+                {"uid": it['uid'], "u": user_id}
+            )
         methods = [{'uid': r['uid'], 'title': r['title'], 'weight': r['weight']} for r in method_rows]
         roadmap.append({'topic': {**it, 'effective_dynamic_weight': effective_dw, 'missing_prereqs': missing}, 'priority': pr, 'skills': skills, 'methods': methods})
     # reorder by effective_dynamic_weight
@@ -580,6 +643,15 @@ def list_items(kind: str, subject_uid: str | None = None, section_uid: str | Non
             rows = repo.read("MATCH (sk:Skill) RETURN sk.uid AS uid, sk.title AS title ORDER BY sk.title")
     elif kind == 'methods':
         rows = repo.read("MATCH (m:Method) RETURN m.uid AS uid, m.title AS title ORDER BY m.title")
+    elif kind == 'examples':
+        if section_uid:
+            rows = repo.read("MATCH (sec:Section {uid:$se})-[:CONTAINS]->(t:Topic)-[:HAS_EXAMPLE]->(e:Example) RETURN e.uid AS uid, e.title AS title ORDER BY e.title", {"se": section_uid})
+        elif subject_uid:
+            rows = repo.read("MATCH (sub:Subject {uid:$su})-[:CONTAINS]->(:Section)-[:CONTAINS]->(t:Topic)-[:HAS_EXAMPLE]->(e:Example) RETURN e.uid AS uid, e.title AS title ORDER BY e.title", {"su": subject_uid})
+        else:
+            rows = repo.read("MATCH (e:Example) RETURN e.uid AS uid, e.title AS title ORDER BY e.title")
+    elif kind == 'errors':
+        rows = repo.read("MATCH (er:Error) RETURN er.uid AS uid, er.title AS title ORDER BY er.title")
     else:
         rows = []
     repo.close()
@@ -604,6 +676,8 @@ def get_node_details(uid: str) -> Dict:
         details["targets"] = [{"uid": r['uid'], "title": r['title'], "type": ('objective' if r['label'] == 'Objective' else 'goal')} for r in g]
         pr = repo.read("MATCH (t:Topic {uid:$uid})-[:PREREQ]->(p:Topic) RETURN p.uid AS uid, p.title AS title", {"uid": uid})
         details["prereqs"] = pr
+        sk = repo.read("MATCH (t:Topic {uid:$uid})-[:USES_SKILL]->(s:Skill) RETURN s.uid AS uid, s.title AS title", {"uid": uid})
+        details["skills"] = sk
     elif typ == 'Skill':
         wrows = repo.read("MATCH (s:Skill {uid:$uid}) RETURN s.static_weight AS sw, s.dynamic_weight AS dw", {"uid": uid})
         if wrows:
@@ -611,6 +685,10 @@ def get_node_details(uid: str) -> Dict:
             details["dynamic_weight"] = wrows[0]['dw']
         lm = repo.read("MATCH (s:Skill {uid:$uid})-[r:LINKED]->(m:Method) RETURN m.uid AS uid, m.title AS title, r.weight AS weight", {"uid": uid})
         details["linked_methods"] = lm
+        ex = repo.read("MATCH (e:Example)-[c:CHECKS]->(s:Skill {uid:$uid}) RETURN e.uid AS uid, e.title AS title, c.role AS role", {"uid": uid})
+        details["examples"] = ex
+        er = repo.read("MATCH (er:Error)-[:RELATES_TO]->(s:Skill {uid:$uid}) RETURN er.uid AS uid, er.title AS title", {"uid": uid})
+        details["errors"] = er
     elif typ == 'Section':
         t = repo.read("MATCH (sec:Section {uid:$uid})-[:CONTAINS]->(t:Topic) RETURN t.uid AS uid, t.title AS title", {"uid": uid})
         details["topics"] = t
@@ -619,6 +697,19 @@ def get_node_details(uid: str) -> Dict:
         sk = repo.read("MATCH (s:Subject {uid:$uid})-[:HAS_SKILL]->(sk:Skill) RETURN sk.uid AS uid, sk.title AS title", {"uid": uid})
         details["sections"] = sec
         details["skills"] = sk
+    elif typ == 'Example':
+        wrows = repo.read("MATCH (e:Example {uid:$uid}) RETURN e.difficulty AS difficulty", {"uid": uid})
+        if wrows:
+            details["difficulty"] = wrows[0]['difficulty']
+        sk = repo.read("MATCH (e:Example {uid:$uid})-[c:CHECKS]->(s:Skill) RETURN s.uid AS uid, s.title AS title, c.role AS role", {"uid": uid})
+        details["skills"] = sk
+        tp = repo.read("MATCH (t:Topic)-[:HAS_EXAMPLE]->(e:Example {uid:$uid}) RETURN t.uid AS uid, t.title AS title", {"uid": uid})
+        details["topics"] = tp
+    elif typ == 'Error':
+        sk = repo.read("MATCH (er:Error {uid:$uid})-[:RELATES_TO]->(s:Skill) RETURN s.uid AS uid, s.title AS title", {"uid": uid})
+        details["skills"] = sk
+        ex = repo.read("MATCH (er:Error {uid:$uid})-[:OBSERVED_IN]->(e:Example) RETURN e.uid AS uid, e.title AS title", {"uid": uid})
+        details["examples"] = ex
     repo.close()
     return details
 
@@ -691,15 +782,21 @@ def add_prereqs_heuristic() -> Dict:
             tgt = session.run("MATCH (t:Topic {uid:$uid}) RETURN t.uid AS uid", uid=rule['target']).single()
             if not tgt:
                 continue
-            for pre in rule['prereqs']:
-                pr = session.run("MATCH (p:Topic {uid:$uid}) RETURN p.uid AS uid", uid=pre).single()
-                if not pr:
-                    continue
-                session.run(
-                    "MATCH (p:Topic {uid:$pre}), (t:Topic {uid:$tgt}) MERGE (t)-[:PREREQ]->(p)",
-                    pre=pre, tgt=rule['target']
-                )
-                created += 1
+        for pre in rule['prereqs']:
+            pr = session.run("MATCH (p:Topic {uid:$uid}) RETURN p.uid AS uid", uid=pre).single()
+            if not pr:
+                continue
+            cyc = session.run(
+                "MATCH (p:Topic {uid:$pre}), (t:Topic {uid:$tgt}) MATCH path=(p)-[:PREREQ*1..]->(t) RETURN path LIMIT 1",
+                pre=pre, tgt=rule['target']
+            ).single()
+            if cyc:
+                continue
+            session.run(
+                "MATCH (p:Topic {uid:$pre}), (t:Topic {uid:$tgt}) MERGE (t)-[:PREREQ]->(p)",
+                pre=pre, tgt=rule['target']
+            )
+            created += 1
 
     driver.close()
     return {"created_prereq_edges": created}
@@ -759,3 +856,80 @@ def link_skill_to_best(skill_uid: str, method_candidates: List[str]) -> Dict:
             break
     driver.close()
     return {"skill": skill_uid, "linked": created}
+def add_prereq_safe(topic_uid: str, prereq_uid: str) -> Dict:
+    driver = get_driver()
+    with driver.session() as session:
+        t = session.run("MATCH (t:Topic {uid:$uid}) RETURN t.uid AS uid", uid=topic_uid).single()
+        p = session.run("MATCH (p:Topic {uid:$uid}) RETURN p.uid AS uid", uid=prereq_uid).single()
+        if not t or not p:
+            driver.close()
+            return {"ok": False, "reason": "missing node"}
+        cyc = session.run(
+            "MATCH (p:Topic {uid:$pre}), (t:Topic {uid:$tgt}) MATCH path=(p)-[:PREREQ*1..]->(t) RETURN path LIMIT 1",
+            pre=prereq_uid, tgt=topic_uid
+        ).single()
+        if cyc:
+            driver.close()
+            return {"ok": False, "reason": "cycle"}
+        session.run(
+            "MATCH (p:Topic {uid:$pre}), (t:Topic {uid:$tgt}) MERGE (t)-[:PREREQ]->(p)",
+            pre=prereq_uid, tgt=topic_uid
+        )
+    driver.close()
+    return {"ok": True}
+
+
+def validate_prereq_global() -> Dict:
+    driver = get_driver()
+    cycles: List[Dict] = []
+    with driver.session() as session:
+        rows = session.run("MATCH (t:Topic) RETURN t.uid AS uid").data()
+        for r in rows:
+            uid = r['uid']
+            bad = session.run(
+                "MATCH (t:Topic {uid:$uid}) MATCH (p:Topic) WHERE p<>t AND EXISTS{ (t)-[:PREREQ*1..]->(p) AND (p)-[:PREREQ*1..]->(t) } RETURN p.uid AS puid",
+                uid=uid
+            ).data()
+            for b in bad:
+                cycles.append({"topic": uid, "prereq": b['puid']})
+    driver.close()
+    return {"cycles": cycles, "ok": len(cycles) == 0}
+
+
+def add_topic_skill(topic_uid: str, skill_uid: str) -> Dict:
+    driver = get_driver()
+    with driver.session() as session:
+        t = session.run("MATCH (t:Topic {uid:$uid}) RETURN t.uid AS uid", uid=topic_uid).single()
+        s = session.run("MATCH (s:Skill {uid:$uid}) RETURN s.uid AS uid", uid=skill_uid).single()
+        if not t or not s:
+            driver.close()
+            return {"ok": False, "reason": "missing node"}
+        session.run(
+            "MATCH (t:Topic {uid:$t}), (s:Skill {uid:$s}) MERGE (t)-[:USES_SKILL]->(s)",
+            t=topic_uid, s=skill_uid
+        )
+    driver.close()
+    return {"ok": True}
+
+
+def link_skill_method(skill_uid: str, method_uid: str, weight: str | None = None, confidence: float | None = None) -> Dict:
+    driver = get_driver()
+    with driver.session() as session:
+        s = session.run("MATCH (s:Skill {uid:$uid}) RETURN s.uid AS uid", uid=skill_uid).single()
+        m = session.run("MATCH (m:Method {uid:$uid}) RETURN m.uid AS uid", uid=method_uid).single()
+        if not s or not m:
+            driver.close()
+            return {"ok": False, "reason": "missing node"}
+        mtypes = session.run("MATCH (m:Method {uid:$uid}) RETURN m.applicability_types AS t", uid=method_uid).single()
+        stype = session.run("MATCH (s:Skill {uid:$uid}) RETURN s.type AS t", uid=skill_uid).single()
+        if mtypes and stype:
+            types = mtypes.get('t') or []
+            if types and stype.get('t') and stype['t'] not in types:
+                driver.close()
+                return {"ok": False, "reason": "inapplicable method type"}
+        session.run(
+            "MATCH (s:Skill {uid:$s}), (m:Method {uid:$m}) MERGE (s)-[r:LINKED]->(m) SET r.weight=COALESCE(r.weight,$w), r.confidence=COALESCE(r.confidence,$c)",
+            s=skill_uid, m=method_uid, w=weight or 'linked', c=confidence or 0.9
+        )
+    driver.close()
+    return {"ok": True}
