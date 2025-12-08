@@ -1,3 +1,18 @@
+"""KnowledgeBaseAI FastAPI
+
+Основной API-сервис для взаимодействия с графом знаний и персонализацией.
+
+Ключевые возможности:
+- Глобальные и персональные веса тем/навыков (static/dynamic/user-specific)
+- Построение дорожных карт обучения (глобальная и пользовательская)
+- Обновление прогресса пользователя и пересчёт адаптивных связей методов
+- Доступ к уровням знания, фиксация завершений, базовые интеграции с БД/Neo4j
+
+Архитектурные заметки:
+- Веса и связи хранятся в Neo4j; пользовательские веса не изменяют первичные данные
+- OLTP операции вынесены в отдельные эндпоинты (см. секцию /oltp/*)
+- Админ-операции защищены API-ключом через заголовок X-API-Key
+"""
 import os
 from typing import List, Dict
 from fastapi import FastAPI, HTTPException, Header
@@ -31,24 +46,34 @@ app = FastAPI(
 
 
 class TestResult(BaseModel):
+    """Пейлоад результата теста по теме.
+
+    При наличии user_id обновляется персональный вес пользователя; иначе — глобальный dynamic_weight темы.
+    """
     topic_uid: str
     score: float
     user_id: str | None = None
 
 
 class SkillTestResult(BaseModel):
+    """Пейлоад результата теста по навыку.
+
+    При наличии user_id обновляется персональный вес пользователя; иначе — глобальный dynamic_weight навыка.
+    """
     skill_uid: str
     score: float
     user_id: str | None = None
 
 
 class RoadmapRequest(BaseModel):
+    """Запрос глобальной дорожной карты: subject_uid (опционально) и лимит результатов."""
     subject_uid: str | None = None
     limit: int = 50
 
 
 @app.on_event("startup")
 def startup_event():
+    """Инициализация приложения: выставление значений по умолчанию для весов узлов в графе."""
     driver = get_driver()
     with driver.session() as session:
         ensure_weight_defaults(session)
@@ -56,6 +81,7 @@ def startup_event():
 
 
 def require_api_key(x_api_key: str | None) -> None:
+    """Проверка админ-ключа для защищённых операций."""
     import os
     expected = os.getenv('ADMIN_API_KEY')
     if expected and x_api_key != expected:
@@ -69,6 +95,7 @@ def require_api_key(x_api_key: str | None) -> None:
     "\nПосле обновления пересчитывает adaptive_weight на связях Skill-[:LINKED]->Method."
 ))
 def submit_test_result(payload: TestResult) -> Dict:
+    """Обновление веса темы (глобально или для конкретного пользователя) и пересчёт связей методов."""
     try:
         if payload.user_id:
             updated = update_user_topic_weight(payload.user_id, payload.topic_uid, payload.score)
@@ -87,6 +114,7 @@ def submit_test_result(payload: TestResult) -> Dict:
     "\nПосле обновления пересчитывает adaptive_weight на связях Skill-[:LINKED]->Method."
 ))
 def submit_skill_test_result(payload: SkillTestResult) -> Dict:
+    """Обновление веса навыка и пересчёт адаптивных весов на связях Skill→Method."""
     try:
         if payload.user_id:
             updated = update_user_skill_weight(payload.user_id, payload.skill_uid, payload.score)
@@ -103,6 +131,7 @@ def submit_skill_test_result(payload: SkillTestResult) -> Dict:
     "\nИспользуется для агрегированного обзора без персонализации."
 ))
 def get_knowledge_level(topic_uid: str) -> Dict:
+    """Вернуть статичный/динамичный вес темы в глобальном графе."""
     try:
         lvl = get_current_knowledge_level(topic_uid)
         return {"ok": True, "level": lvl}
@@ -115,6 +144,7 @@ def get_knowledge_level(topic_uid: str) -> Dict:
     "\nИспользуется для агрегированного обзора без персонализации."
 ))
 def get_skill_level(skill_uid: str) -> Dict:
+    """Вернуть статичный/динамичный вес навыка в глобальном графе."""
     try:
         lvl = get_current_skill_level(skill_uid)
         return {"ok": True, "level": lvl}
@@ -159,6 +189,7 @@ def get_user_skill_level(user_id: str, skill_uid: str) -> Dict:
 
 
 class UserRoadmapRequest(BaseModel):
+    """Запрос персональной дорожной карты: пользователь, предмет, лимит, штраф за незакрытые пререквизиты."""
     user_id: str
     subject_uid: str | None = None
     limit: int = 50
@@ -170,6 +201,7 @@ class UserRoadmapRequest(BaseModel):
     "\nВозвращает темы с приоритетами, связанные навыки/методы с учетом пользовательских весов."
 ))
 def get_user_roadmap(payload: UserRoadmapRequest) -> Dict:
+    """Построить персональную дорожную карту: темы + их skills/methods только по связям выбранной темы."""
     try:
         items = build_user_roadmap(payload.user_id, payload.subject_uid, payload.limit, payload.penalty_factor or 0.15)
         return {"ok": True, "roadmap": items}
@@ -178,6 +210,7 @@ def get_user_roadmap(payload: UserRoadmapRequest) -> Dict:
 
 
 class CompleteTopicRequest(BaseModel):
+    """Пейлоад фиксации завершения темы пользователем."""
     user_id: str
     topic_uid: str
     time_spent_sec: float
@@ -188,6 +221,7 @@ class CompleteTopicRequest(BaseModel):
     "Создаёт связь User-[:COMPLETED]->Topic с метриками времени и ошибок."
 ))
 def api_complete_topic(payload: CompleteTopicRequest) -> Dict:
+    """Создать связь User-[:COMPLETED]->Topic с метриками."""
     try:
         return complete_user_topic(payload.user_id, payload.topic_uid, payload.time_spent_sec, payload.errors)
     except Exception as e:
@@ -195,6 +229,7 @@ def api_complete_topic(payload: CompleteTopicRequest) -> Dict:
 
 
 class CompleteSkillRequest(BaseModel):
+    """Пейлоад фиксации завершения навыка пользователем."""
     user_id: str
     skill_uid: str
     time_spent_sec: float
@@ -205,6 +240,7 @@ class CompleteSkillRequest(BaseModel):
     "Создаёт связь User-[:COMPLETED]->Skill с метриками времени и ошибок."
 ))
 def api_complete_skill(payload: CompleteSkillRequest) -> Dict:
+    """Создать связь User-[:COMPLETED]->Skill с метриками."""
     try:
         return complete_user_skill(payload.user_id, payload.skill_uid, payload.time_spent_sec, payload.errors)
     except Exception as e:
@@ -216,6 +252,7 @@ def api_complete_skill(payload: CompleteSkillRequest) -> Dict:
     " на основе текущих динамичных весов навыков (глобально или после обновлений пользователя)."
 ))
 def recompute_links(x_api_key: str | None = Header(default=None)) -> Dict:
+    """Пересчитать adaptive_weight для всех связей Skill→Method на основе актуальных динамичных весов."""
     try:
         require_api_key(x_api_key)
         stats = recompute_relationship_weights()
