@@ -1,3 +1,12 @@
+"""KnowledgeBaseAI Flask UI
+
+Веб-интерфейс для просмотра/редактирования базы знаний и синхронизации в Neo4j.
+
+Основные функции:
+- Просмотр графа знаний (локально из JSONL или из Neo4j)
+- Добавление предметов/разделов/тем/навыков/методов и связей
+- Нормализация JSONL, синхронизация в Neo4j, базовая аналитика качества
+"""
 import os
 import json
 from typing import List, Dict
@@ -12,6 +21,7 @@ KB_DIR = os.path.join(BASE_DIR, 'kb')
 
 
 def load_jsonl(filepath: str) -> List[Dict]:
+    """Загрузить JSONL файл в список словарей, игнорируя битые строки."""
     data: List[Dict] = []
     if not os.path.exists(filepath):
         return data
@@ -29,12 +39,14 @@ def load_jsonl(filepath: str) -> List[Dict]:
 
 
 def append_jsonl(filepath: str, record: Dict) -> None:
+    """Добавить запись в конец JSONL с созданием директорий при необходимости."""
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'a', encoding='utf-8') as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def rewrite_jsonl(filepath: str, records: List[Dict]) -> None:
+    """Полностью перезаписать JSONL указанным набором записей."""
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'w', encoding='utf-8') as f:
         for r in records:
@@ -54,6 +66,7 @@ VALID_UID_PREFIXES = {
 
 
 def uid_has_valid_prefix(kind: str, uid: str | None) -> bool:
+    """Проверка допустимого префикса UID по типу сущности."""
     prefixes = VALID_UID_PREFIXES.get(kind)
     if not prefixes or not uid:
         return True
@@ -61,6 +74,7 @@ def uid_has_valid_prefix(kind: str, uid: str | None) -> bool:
 
 
 def uid_suffix_is_valid(uid: str) -> bool:
+    """Валидация суффикса UID: после первого '-' допускаются только буквы/цифры/`-`/`_`."""
     # everything after first '-' must be letters/digits (Unicode) or '-'/'_'
     if '-' not in uid:
         return False
@@ -72,6 +86,7 @@ def uid_suffix_is_valid(uid: str) -> bool:
 
 
 def normalize_jsonl_file(filepath: str, kind: str) -> Dict:
+    """Нормализовать JSONL: разрезать склеенные записи, провалидировать схему, дедуплировать, перезаписать."""
     if not os.path.exists(filepath):
         return {'file': os.path.basename(filepath), 'exists': False, 'before': 0, 'after': 0}
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -175,6 +190,7 @@ def normalize_jsonl_file(filepath: str, kind: str) -> Dict:
 
 
 def build_graph(subject_filter: str | None = None) -> Dict:
+    """Собрать граф из локальных JSONL файлов для UI режима без Neo4j."""
     subjects = load_jsonl(os.path.join(KB_DIR, 'subjects.jsonl'))
     sections = load_jsonl(os.path.join(KB_DIR, 'sections.jsonl'))
     topics = load_jsonl(os.path.join(KB_DIR, 'topics.jsonl'))
@@ -341,6 +357,7 @@ def knowledge():
 
 @app.get('/api/graph')
 def api_graph():
+    """Вернуть граф (из Neo4j при наличии конфигурации, иначе — локально)."""
     subject_uid = request.args.get('subject_uid')
     if os.getenv('NEO4J_URI') and os.getenv('NEO4J_USER') and os.getenv('NEO4J_PASSWORD'):
         graph = build_graph_from_neo4j(subject_uid)
@@ -350,6 +367,7 @@ def api_graph():
 
 
 def make_uid(prefix: str, title: str) -> str:
+    """Сгенерировать UID по префиксу и названию (простая эвристика для демо-режима)."""
     base = ''.join(ch for ch in title.upper() if ch.isalnum())
     base = base[:18] if base else 'ITEM'
     return f"{prefix}-{base}"
@@ -357,6 +375,7 @@ def make_uid(prefix: str, title: str) -> str:
 
 @app.post('/api/subjects')
 def api_add_subject():
+    """Добавить предмет (subjects.jsonl)."""
     payload = request.get_json(force=True)
     title = payload.get('title')
     description = payload.get('description', '')
@@ -368,6 +387,7 @@ def api_add_subject():
 
 @app.post('/api/sections')
 def api_add_section():
+    """Добавить раздел (sections.jsonl)."""
     payload = request.get_json(force=True)
     title = payload.get('title')
     description = payload.get('description', '')
@@ -384,6 +404,7 @@ def api_add_section():
 
 @app.post('/api/topics')
 def api_add_topic():
+    """Добавить тему (topics.jsonl) с базовыми порогами гейта."""
     payload = request.get_json(force=True)
     title = payload.get('title')
     description = payload.get('description', '')
@@ -409,6 +430,7 @@ def api_add_topic():
 
 @app.post('/api/skills')
 def api_add_skill():
+    """Добавить навык (skills.jsonl)."""
     payload = request.get_json(force=True)
     title = payload.get('title')
     definition = payload.get('definition', '')
@@ -425,6 +447,7 @@ def api_add_skill():
 
 @app.post('/api/methods')
 def api_add_method():
+    """Добавить метод (methods.jsonl)."""
     payload = request.get_json(force=True)
     title = payload.get('title')
     method_text = payload.get('method_text', '')
@@ -441,6 +464,7 @@ def api_add_method():
 
 @app.post('/api/topic_goals')
 def api_add_topic_goal():
+    """Добавить цель темы (topic_goals.jsonl)."""
     payload = request.get_json(force=True)
     title = payload.get('title')
     topic_uid = payload.get('topic_uid')
@@ -456,6 +480,7 @@ def api_add_topic_goal():
 
 @app.post('/api/topic_objectives')
 def api_add_topic_objective():
+    """Добавить задачу темы (topic_objectives.jsonл)."""
     payload = request.get_json(force=True)
     title = payload.get('title')
     topic_uid = payload.get('topic_uid')
@@ -471,6 +496,7 @@ def api_add_topic_objective():
 
 @app.post('/api/skill_methods')
 def api_link_skill_method():
+    """Связать навык и метод (skill_methods.jsonl) с весом/уверенностью."""
     payload = request.get_json(force=True)
     skill_uid = payload.get('skill_uid')
     method_uid = payload.get('method_uid')
@@ -494,6 +520,7 @@ def api_link_skill_method():
 
 @app.post('/api/normalize_kb')
 def api_normalize_kb():
+    """Нормализовать ключевые JSONL файлы (валидация/дедупликация)."""
     expected = os.getenv('ADMIN_API_KEY')
     provided = request.headers.get('X-API-Key')
     if expected and provided != expected:
@@ -514,6 +541,7 @@ def api_normalize_kb():
 
 @app.get('/api/list')
 def api_list():
+    """Список сущностей по типу (subjects/sections/topics/skills/methods/examples/errors)."""
     kind = request.args.get('kind')
     subject_uid = request.args.get('subject_uid')
     section_uid = request.args.get('section_uid')
@@ -523,6 +551,7 @@ def api_list():
 
 @app.get('/api/node_details')
 def api_node_details():
+    """Детали узла (включая связи и веса)."""
     uid = request.args.get('uid')
     details = get_node_details(uid)
     return jsonify({'ok': True, 'details': details})
@@ -530,6 +559,7 @@ def api_node_details():
 
 @app.get('/api/search')
 def api_search():
+    """Поиск по title во всех сущностях графа."""
     q = request.args.get('q', '')
     limit = int(request.args.get('limit', '20'))
     items = search_titles(q, limit)
@@ -538,11 +568,13 @@ def api_search():
 
 @app.get('/health')
 def api_health():
+    """Проверка состояния Neo4j соединения."""
     return jsonify(health())
 
 
 @app.get('/api/openapi.json')
 def api_openapi_spec():
+    """Мини-спецификация OpenAPI для фронтенд Swagger."""
     spec = {
         "openapi": "3.0.3",
         "info": {"title": "KnowledgeBaseAI Flask API", "version": "1.0.0"},
@@ -639,11 +671,13 @@ def api_openapi_spec():
 
 @app.get('/api/docs')
 def api_swagger_ui():
+    """Отдать HTML с Swagger UI для Flask API."""
     return render_template('swagger.html')
 
 
 @app.post('/api/delete_record')
 def api_delete_record():
+    """Удалить запись из JSONL по типу сущности."""
     expected = os.getenv('ADMIN_API_KEY')
     provided = request.headers.get('X-API-Key')
     if expected and provided != expected:
@@ -682,6 +716,7 @@ def api_delete_record():
 
 @app.post('/api/neo4j_sync')
 def api_neo4j_sync():
+    """Синхронизировать JSONL в Neo4j (создание узлов/связей, индексов/констрейнтов)."""
     # simple header-based key protection
     expected = os.getenv('ADMIN_API_KEY')
     provided = request.headers.get('X-API-Key')
@@ -693,6 +728,7 @@ def api_neo4j_sync():
 
 @app.get('/api/analysis')
 def api_analysis():
+    """Аналитика качества графа: сироты, покрытие связей, стат.метрики."""
     subject_uid = request.args.get('subject_uid')
     metrics = analyze_knowledge(subject_uid)
     return jsonify({'ok': True, 'metrics': metrics})

@@ -2,20 +2,14 @@ services:
   traefik:
     image: traefik:v3.0
     command:
-      - --api.dashboard=true
-      - --providers.docker=true
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.le.acme.httpchallenge=true
-      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
-      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}
-      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --configFile=/etc/traefik/traefik.yml
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./letsencrypt:/letsencrypt
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
 
   flask:
     build:
@@ -25,20 +19,27 @@ services:
       NEO4J_URI: ${NEO4J_URI}
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    volumes:
+      - ./:/app
+    command: flask --app web_app.py run --host 0.0.0.0 --port 5000 --reload
     labels:
       - "traefik.enable=true"
-      # studyninja.ru
+      - "traefik.http.services.flask-svc.loadbalancer.server.port=5000"
       - "traefik.http.routers.flask-stud.rule=Host(`${KB_DOMAIN}`)"
       - "traefik.http.routers.flask-stud.entrypoints=web"
+      - "traefik.http.routers.flask-stud.service=flask-svc"
       - "traefik.http.routers.flask-stud-sec.rule=Host(`${KB_DOMAIN}`)"
       - "traefik.http.routers.flask-stud-sec.entrypoints=websecure"
+      - "traefik.http.routers.flask-stud-sec.service=flask-svc"
       - "traefik.http.routers.flask-stud-sec.tls=true"
       - "traefik.http.routers.flask-stud-sec.tls.certresolver=le"
-      # xteam.pro
       - "traefik.http.routers.flask-xteam.rule=Host(`${KB_ALT_DOMAIN}`)"
       - "traefik.http.routers.flask-xteam.entrypoints=web"
+      - "traefik.http.routers.flask-xteam.service=flask-svc"
       - "traefik.http.routers.flask-xteam-sec.rule=Host(`${KB_ALT_DOMAIN}`)"
       - "traefik.http.routers.flask-xteam-sec.entrypoints=websecure"
+      - "traefik.http.routers.flask-xteam-sec.service=flask-svc"
       - "traefik.http.routers.flask-xteam-sec.tls=true"
       - "traefik.http.routers.flask-xteam-sec.tls.certresolver=le"
 
@@ -50,19 +51,26 @@ services:
       NEO4J_URI: ${NEO4J_URI}
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    volumes:
+      - ./:/app
+    command: uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload
     labels:
       - "traefik.enable=true"
-      # studyninja.ru
+      - "traefik.http.services.fastapi-svc.loadbalancer.server.port=8000"
       - "traefik.http.routers.fastapi-stud.rule=Host(`api.${KB_DOMAIN}`)"
       - "traefik.http.routers.fastapi-stud.entrypoints=web"
+      - "traefik.http.routers.fastapi-stud.service=fastapi-svc"
       - "traefik.http.routers.fastapi-stud-sec.rule=Host(`api.${KB_DOMAIN}`)"
       - "traefik.http.routers.fastapi-stud-sec.entrypoints=websecure"
+      - "traefik.http.routers.fastapi-stud-sec.service=fastapi-svc"
       - "traefik.http.routers.fastapi-stud-sec.tls=true"
       - "traefik.http.routers.fastapi-stud-sec.tls.certresolver=le"
-      # xteam.pro
       - "traefik.http.routers.fastapi-xteam.rule=Host(`api.${KB_ALT_DOMAIN}`)"
       - "traefik.http.routers.fastapi-xteam.entrypoints=web"
+      - "traefik.http.routers.fastapi-xteam.service=fastapi-svc"
       - "traefik.http.routers.fastapi-xteam-sec.rule=Host(`api.${KB_ALT_DOMAIN}`)"
       - "traefik.http.routers.fastapi-xteam-sec.entrypoints=websecure"
+      - "traefik.http.routers.fastapi-xteam-sec.service=fastapi-svc"
       - "traefik.http.routers.fastapi-xteam-sec.tls=true"
       - "traefik.http.routers.fastapi-xteam-sec.tls.certresolver=le"
