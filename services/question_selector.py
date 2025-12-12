@@ -58,12 +58,19 @@ def select_examples_for_topics(
                 ),
                 {"t": topic_uids}
             )
+            def _norm(x):
+                try:
+                    xf = float(x)
+                except Exception:
+                    return 0.6
+                return xf if xf <= 1.0 else max(0.0, min(1.0, xf / 5.0))
             for r in rows:
-                d = int(r.get('difficulty', 3) or 3)
+                d_int = int(r.get('difficulty', 3) or 3)
                 if d < difficulty_min or d > difficulty_max:
                     continue
                 if r.get('uid') in exclude:
                     continue
+                r['difficulty'] = _norm(r.get('difficulty', d_int))
                 pool.append(r)
             repo.close()
         except Exception:
@@ -71,6 +78,12 @@ def select_examples_for_topics(
     # Fallback to JSONL
     if not pool:
         idx = get_examples_indexed()
+        def _norm(x):
+            try:
+                xf = float(x)
+            except Exception:
+                return 0.6
+            return xf if xf <= 1.0 else max(0.0, min(1.0, xf / 5.0))
         for tu in topic_uids:
             for e in idx["by_topic"].get(tu, []):
                 d = int(e.get('difficulty', 3) or 3)
@@ -78,6 +91,7 @@ def select_examples_for_topics(
                     continue
                 if e.get('uid') in exclude:
                     continue
+                e['difficulty'] = _norm(e.get('difficulty', d))
                 pool.append(e)
     # simple diversity: round-robin by topic order
     selected: List[Dict] = []

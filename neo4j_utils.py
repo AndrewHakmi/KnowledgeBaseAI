@@ -113,6 +113,8 @@ def ensure_constraints(session):
     session.run("CREATE CONSTRAINT topic_uid_unique IF NOT EXISTS FOR (n:Topic) REQUIRE n.uid IS UNIQUE")
     session.run("CREATE CONSTRAINT skill_uid_unique IF NOT EXISTS FOR (n:Skill) REQUIRE n.uid IS UNIQUE")
     session.run("CREATE CONSTRAINT method_uid_unique IF NOT EXISTS FOR (n:Method) REQUIRE n.uid IS UNIQUE")
+    session.run("CREATE CONSTRAINT example_uid_unique IF NOT EXISTS FOR (n:Example) REQUIRE n.uid IS UNIQUE")
+    session.run("CREATE CONSTRAINT error_uid_unique IF NOT EXISTS FOR (n:Error) REQUIRE n.uid IS UNIQUE")
     session.run("CREATE CONSTRAINT contentunit_uid_unique IF NOT EXISTS FOR (n:ContentUnit) REQUIRE n.uid IS UNIQUE")
     session.run("CREATE CONSTRAINT goal_uid_unique IF NOT EXISTS FOR (n:Goal) REQUIRE n.uid IS UNIQUE")
     session.run("CREATE CONSTRAINT objective_uid_unique IF NOT EXISTS FOR (n:Objective) REQUIRE n.uid IS UNIQUE")
@@ -121,6 +123,8 @@ def ensure_constraints(session):
     session.run("CREATE INDEX topic_title_idx IF NOT EXISTS FOR (n:Topic) ON (n.title)")
     session.run("CREATE INDEX skill_title_idx IF NOT EXISTS FOR (n:Skill) ON (n.title)")
     session.run("CREATE INDEX method_title_idx IF NOT EXISTS FOR (n:Method) ON (n.title)")
+    session.run("CREATE INDEX example_title_idx IF NOT EXISTS FOR (n:Example) ON (n.title)")
+    session.run("CREATE INDEX example_difficulty_idx IF NOT EXISTS FOR (n:Example) ON (n.difficulty)")
     session.run("CREATE CONSTRAINT section_title_scope_unique IF NOT EXISTS FOR (n:Section) REQUIRE (n.subject_uid, n.title) IS UNIQUE")
     session.run("CREATE CONSTRAINT topic_title_scope_unique IF NOT EXISTS FOR (n:Topic) REQUIRE (n.section_uid, n.title) IS UNIQUE")
     session.run("CREATE CONSTRAINT skill_title_scope_unique IF NOT EXISTS FOR (n:Skill) REQUIRE (n.subject_uid, n.title) IS UNIQUE")
@@ -505,7 +509,33 @@ def build_user_roadmap_stateless(
 ) -> List[Dict]:
     """Построить статическую персональную дорожную карту на основе переданных весов без записи в граф."""
     if not (os.getenv('NEO4J_URI') and os.getenv('NEO4J_USER') and os.getenv('NEO4J_PASSWORD')):
-        return []
+        topics = _load_jsonl(os.path.join(KB_DIR, 'topics.jsonl'))
+        sections = _load_jsonl(os.path.join(KB_DIR, 'sections.jsonl'))
+        subj_by_section = {s.get('uid'): s.get('subject_uid') for s in sections}
+        roadmap: List[Dict] = []
+        for t in topics:
+            sec_uid = t.get('section_uid')
+            subj_uid = subj_by_section.get(sec_uid)
+            if subject_uid and subj_uid != subject_uid:
+                continue
+            tuid = t.get('uid')
+            title = t.get('title') or tuid
+            base_weight = 0.5
+            user_w = float(user_topic_weights.get(tuid, base_weight))
+            effective_weight = max(0.0, min(1.0, user_w))
+            pr = "high" if user_w < 0.3 else ("medium" if user_w < 0.7 else "low")
+            roadmap.append({
+                "topic_uid": tuid,
+                "title": title,
+                "base_weight": base_weight,
+                "user_weight": user_w,
+                "effective_weight": effective_weight,
+                "priority": pr,
+                "prereqs": [],
+                "skills": [],
+            })
+        roadmap.sort(key=lambda x: x.get("effective_weight", 0.0), reverse=True)
+        return roadmap[:limit]
     repo = Neo4jRepo()
     if subject_uid:
         rows = repo.read(
@@ -530,6 +560,36 @@ def build_user_roadmap_stateless(
                 "collect(pre.uid) AS prereqs"
             )
         )
+    if not rows:
+        # Fallback to JSONL if Neo4j has no data for the query
+        topics = _load_jsonl(os.path.join(KB_DIR, 'topics.jsonl'))
+        sections = _load_jsonl(os.path.join(KB_DIR, 'sections.jsonl'))
+        subj_by_section = {s.get('uid'): s.get('subject_uid') for s in sections}
+        roadmap: List[Dict] = []
+        for t in topics:
+            sec_uid = t.get('section_uid')
+            subj_uid = subj_by_section.get(sec_uid)
+            if subject_uid and subj_uid != subject_uid:
+                continue
+            tuid = t.get('uid')
+            title = t.get('title') or tuid
+            base_weight = 0.5
+            user_w = float(user_topic_weights.get(tuid, base_weight))
+            effective_weight = max(0.0, min(1.0, user_w))
+            pr = "high" if user_w < 0.3 else ("medium" if user_w < 0.7 else "low")
+            roadmap.append({
+                "topic_uid": tuid,
+                "title": title,
+                "base_weight": base_weight,
+                "user_weight": user_w,
+                "effective_weight": effective_weight,
+                "priority": pr,
+                "prereqs": [],
+                "skills": [],
+            })
+        repo.close()
+        roadmap.sort(key=lambda x: x.get("effective_weight", 0.0), reverse=True)
+        return roadmap[:limit]
     topic_index = {r["uid"]: r for r in rows}
     roadmap: List[Dict] = []
     for r in rows:

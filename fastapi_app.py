@@ -34,6 +34,7 @@ from neo4j_utils import (
 )
 from services.question_selector import select_examples_for_topics, all_topic_uids_from_examples
 from kb_jobs import start_rebuild_async, get_job_status
+from services.curriculum_repo import create_curriculum, add_curriculum_nodes, get_graph_view
 
 app = FastAPI(
     title="KnowledgeBaseAI API",
@@ -246,3 +247,42 @@ def recompute_links(x_api_key: str | None = Header(default=None)) -> Dict:
         return {"ok": True, "stats": stats}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+def _require_admin(headers: Dict) -> bool:
+    expected = os.getenv('ADMIN_API_KEY')
+    provided = headers.get('X-API-Key') if isinstance(headers, dict) else None
+    return (not expected) or (provided == expected)
+
+class CreateCurriculumInput(BaseModel):
+    code: str
+    title: str
+    standard: str
+    language: str
+
+@app.post("/admin/curriculum")
+def admin_create_curriculum(payload: CreateCurriculumInput, x_api_key: str | None = Header(default=None)) -> Dict:
+    if not _require_admin({"X-API-Key": x_api_key}):
+        raise HTTPException(status_code=401, detail="invalid api key")
+    res = create_curriculum(payload.code, payload.title, payload.standard, payload.language)
+    if not res.get("ok"):
+        raise HTTPException(status_code=500, detail=res.get("error", "unknown error"))
+    return res
+
+class CurriculumNodeInput(BaseModel):
+    code: str
+    nodes: List[Dict]
+
+@app.post("/admin/curriculum/nodes")
+def admin_add_curriculum_nodes(payload: CurriculumNodeInput, x_api_key: str | None = Header(default=None)) -> Dict:
+    if not _require_admin({"X-API-Key": x_api_key}):
+        raise HTTPException(status_code=401, detail="invalid api key")
+    res = add_curriculum_nodes(payload.code, payload.nodes)
+    if not res.get("ok"):
+        raise HTTPException(status_code=500, detail=res.get("error", "unknown error"))
+    return res
+
+@app.get("/curriculum/{code}/graph_view")
+def get_curriculum_graph_view(code: str) -> Dict:
+    res = get_graph_view(code)
+    if not res.get("ok"):
+        raise HTTPException(status_code=404, detail=res.get("error", "not found"))
+    return res
