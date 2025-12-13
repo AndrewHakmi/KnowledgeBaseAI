@@ -22,37 +22,46 @@ services:
       - "traefik.http.middlewares.dashboard-auth.basicauth.usersfile=/etc/traefik/users.htpasswd"
       - "traefik.http.routers.traefik.middlewares=dashboard-auth"
 
-  flask:
+  frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.flask
-    environment:
-      NEO4J_URI: ${NEO4J_URI}
-      NEO4J_USER: ${NEO4J_USER}
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-    volumes:
-      - ./:/app
-    command: flask --app web_app.py run --host 0.0.0.0 --port 5000 --reload
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.services.flask-svc.loadbalancer.server.port=5000"
-      - "traefik.http.routers.flask-stud.rule=Host(`${KB_DOMAIN}`)"
-      - "traefik.http.routers.flask-stud.entrypoints=web"
-      - "traefik.http.routers.flask-stud.service=flask-svc"
-      - "traefik.http.routers.flask-stud-sec.rule=Host(`${KB_DOMAIN}`)"
-      - "traefik.http.routers.flask-stud-sec.entrypoints=websecure"
-      - "traefik.http.routers.flask-stud-sec.service=flask-svc"
-      - "traefik.http.routers.flask-stud-sec.tls=true"
-      - "traefik.http.routers.flask-stud-sec.tls.certresolver=le"
-      - "traefik.http.routers.flask-xteam.rule=Host(`${KB_ALT_DOMAIN}`)"
-      - "traefik.http.routers.flask-xteam.entrypoints=web"
-      - "traefik.http.routers.flask-xteam.service=flask-svc"
-      - "traefik.http.routers.flask-xteam-sec.rule=Host(`${KB_ALT_DOMAIN}`)"
-      - "traefik.http.routers.flask-xteam-sec.entrypoints=websecure"
-      - "traefik.http.routers.flask-xteam-sec.service=flask-svc"
-      - "traefik.http.routers.flask-xteam-sec.tls=true"
-      - "traefik.http.routers.flask-xteam-sec.tls.certresolver=le"
+      - "traefik.http.services.frontend-svc.loadbalancer.server.port=80"
+      - "traefik.http.routers.frontend-stud.rule=Host(`${KB_DOMAIN}`)"
+      - "traefik.http.routers.frontend-stud.entrypoints=web"
+      - "traefik.http.routers.frontend-stud.service=frontend-svc"
+      - "traefik.http.routers.frontend-stud-sec.rule=Host(`${KB_DOMAIN}`)"
+      - "traefik.http.routers.frontend-stud-sec.entrypoints=websecure"
+      - "traefik.http.routers.frontend-stud-sec.service=frontend-svc"
+      - "traefik.http.routers.frontend-stud-sec.tls=true"
+      - "traefik.http.routers.frontend-stud-sec.tls.certresolver=le"
+      - "traefik.http.routers.frontend-xteam.rule=Host(`${KB_ALT_DOMAIN}`)"
+      - "traefik.http.routers.frontend-xteam.entrypoints=web"
+      - "traefik.http.routers.frontend-xteam.service=frontend-svc"
+      - "traefik.http.routers.frontend-xteam-sec.rule=Host(`${KB_ALT_DOMAIN}`)"
+      - "traefik.http.routers.frontend-xteam-sec.entrypoints=websecure"
+      - "traefik.http.routers.frontend-xteam-sec.service=frontend-svc"
+      - "traefik.http.routers.frontend-xteam-sec.tls=true"
+      - "traefik.http.routers.frontend-xteam-sec.tls.certresolver=le"
+  frontend-dev:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.frontend-dev-svc.loadbalancer.server.port=5173"
+      - "traefik.http.routers.frontend-dev-stud.rule=Host(`${KB_DOMAIN}`)"
+      - "traefik.http.routers.frontend-dev-stud.entrypoints=web"
+      - "traefik.http.routers.frontend-dev-stud.service=frontend-dev-svc"
+      - "traefik.http.routers.frontend-dev-stud-sec.rule=Host(`${KB_DOMAIN}`)"
+      - "traefik.http.routers.frontend-dev-stud-sec.entrypoints=websecure"
+      - "traefik.http.routers.frontend-dev-stud-sec.service=frontend-dev-svc"
+      - "traefik.http.routers.frontend-dev-stud-sec.tls=true"
+      - "traefik.http.routers.frontend-dev-stud-sec.tls.certresolver=le"
 
   fastapi:
     build:
@@ -67,7 +76,7 @@ services:
       QDRANT_URL: ${QDRANT_URL}
     volumes:
       - ./:/app
-    command: uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     labels:
       - "traefik.enable=true"
       - "traefik.http.services.fastapi-svc.loadbalancer.server.port=8000"

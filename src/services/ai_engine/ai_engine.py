@@ -1,7 +1,7 @@
 from typing import List
 from pydantic import BaseModel, Field
 from openai import AsyncOpenAI
-import instructor
+import json
 from src.core.config import settings
 
 class GeneratedConcept(BaseModel):
@@ -17,12 +17,18 @@ class GeneratedBundle(BaseModel):
     concepts: List[GeneratedConcept]
     skills: List[GeneratedSkill]
 
-client = instructor.from_openai(AsyncOpenAI(api_key=settings.openai_api_key), mode=instructor.Mode.JSON_SCHEMA)
+oai = AsyncOpenAI(api_key=settings.openai_api_key)
 
 async def generate_concepts_and_skills(topic: str, language: str) -> GeneratedBundle:
     messages = [
         {"role": "system", "content": "Return structured JSON for concepts and skills in the target language."},
         {"role": "user", "content": f"topic={topic}; lang={language}"},
     ]
-    resp = await client.chat.completions.create(model="gpt-4o-mini", messages=messages, response_model=GeneratedBundle)
-    return resp
+    resp = await oai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        response_format={"type": "json_object"},
+    )
+    content = resp.choices[0].message.content or "{}"
+    data = json.loads(content)
+    return GeneratedBundle.model_validate(data)

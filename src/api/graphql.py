@@ -39,6 +39,12 @@ class Method:
     title: Optional[str] = None
 
 @strawberry.type
+class Edge:
+    source: str
+    target: str
+    rel: str
+
+@strawberry.type
 class GraphView:
     nodes: List[Node]
     edges: List[Edge]
@@ -107,6 +113,12 @@ class Example:
     title: str
     statement: str
     difficulty: float
+@strawberry.type
+class ErrorNode:
+    uid: str
+    title: str
+    triggers: List[Node]
+    examples: List[Example]
 
 @strawberry.type
 class TopicDetails:
@@ -150,12 +162,43 @@ def _topic_details(uid: str) -> TopicDetails:
             return xf if xf <= 1.0 else max(0.0, min(1.0, xf / 5.0))
         examples = [Example(uid=r.get('uid',''), title=r.get('title',''), statement=r.get('statement',''), difficulty=_norm(r.get('difficulty', 3))) for r in ex_rows]
     errors = []
+    with drv.session() as s2:
+        err_rows = s2.run(
+            "MATCH (t:Topic {uid:$u})-[:USES_SKILL]->(sk:Skill)<-[:TRIGGERS]-(e:Error) RETURN DISTINCT e.uid AS uid, e.title AS title",
+            {"u": uid}
+        )
+        errors = [Node(uid=r["uid"], title=r["title"], type="error") for r in err_rows]
     drv.close()
     return TopicDetails(uid=uid, title=t_title, prereqs=prereqs, goals=goals, objectives=objectives, methods=methods, examples=examples, errors=errors)
 
+def _error_details(uid: str) -> ErrorNode:
+    drv = get_driver()
+    title = ""
+    triggers: List[Node] = []
+    examples: List[Example] = []
+    with drv.session() as s:
+        row = s.run("MATCH (e:Error {uid:$u}) RETURN e.title AS title", {"u": uid}).single()
+        title = (row["title"] if row else "") or ""
+        trs = s.run("MATCH (e:Error {uid:$u})-[:TRIGGERS]->(sk:Skill) RETURN sk.uid AS uid, sk.title AS title", {"u": uid})
+        triggers = [Node(uid=r["uid"], title=r["title"], type="skill") for r in trs]
+        exq = s.run("MATCH (e:Error {uid:$u})-[:ILLUSTRATED_BY]->(q) RETURN q.uid AS uid, q.title AS title, q.statement AS statement, q.difficulty AS difficulty", {"u": uid}).data()
+    if not exq:
+        ex_json = [e for e in _load_jsonl('examples.jsonl') if uid in (e.get('error_uids') or [])]
+        examples = [Example(uid=e.get('uid',''), title=e.get('title',''), statement=e.get('statement',''), difficulty=float(e.get('difficulty', 3))) for e in ex_json]
+    else:
+        def _norm(x):
+            try:
+                xf = float(x)
+            except Exception:
+                return 0.6
+            return xf if xf <= 1.0 else max(0.0, min(1.0, xf / 5.0))
+        examples = [Example(uid=r.get('uid',''), title=r.get('title',''), statement=r.get('statement',''), difficulty=_norm(r.get('difficulty', 3))) for r in exq]
+    drv.close()
+    return ErrorNode(uid=uid, title=title, triggers=triggers, examples=examples)
+
 @strawberry.type
 class Query:
-    graph: GraphView = strawberry.field(resolver=lambda subject_uid=None: _graph_from_subject(subject_uid))
+    @strawberry.field
     def graph(self, subject_uid: Optional[str] = None) -> GraphView:
         return _graph_from_subject(subject_uid)
 
@@ -165,6 +208,32 @@ class Query:
         return Curriculum(code=code, nodes=nodes)
     def topic(self, uid: str) -> TopicDetails:
         return _topic_details(uid)
+    def error(self, uid: str) -> ErrorNode:
+        return _error_details(uid)
+    def errorsBySkill(self, skill_uid: str) -> List[ErrorNode]:
+        drv = get_driver()
+        out: List[ErrorNode] = []
+        with drv.session() as s:
+            rows = s.run("MATCH (e:Error)-[:TRIGGERS]->(sk:Skill {uid:$u}) RETURN e.uid AS uid", {"u": skill_uid}).data()
+            for r in rows:
+                out.append(_error_details(r["uid"]))
+        drv.close()
+        return out
+    def errorsByTopic(self, topic_uid: str) -> List[ErrorNode]:
+        drv = get_driver()
+        out: List[ErrorNode] = []
+        with drv.session() as s:
+            rows = s.run(
+                "MATCH (t:Topic {uid:$u})-[:USES_SKILL]->(sk:Skill)<-[:TRIGGERS]-(e:Error) RETURN DISTINCT e.uid AS uid",
+                {"u": topic_uid}
+            ).data()
+            for r in rows:
+                out.append(_error_details(r["uid"]))
+        drv.close()
+        return out
+    def examplesByError(self, error_uid: str) -> List[Example]:
+        e = _error_details(error_uid)
+        return e.examples
 
 schema = strawberry.Schema(Query)
 router = GraphQLRouter(schema)
