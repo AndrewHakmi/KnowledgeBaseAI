@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 from src.services.graph.neo4j_repo import relation_context, neighbors
-from src.core.config import settings
+from src.config.settings import settings
 from src.services.roadmap_planner import plan_route
 from src.services.questions import select_examples_for_topics, all_topic_uids_from_examples
 
@@ -29,7 +29,7 @@ async def chat(payload: ChatInput) -> Dict:
     except Exception:
         return {"error": "openai package not installed"}
     ctx = relation_context(payload.from_uid, payload.to_uid)
-    oai = AsyncOpenAI(api_key=settings.openai_api_key)
+    oai = AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value())
     messages = [
         {"role": "system", "content": "You are a graph expert. Explain why the relationship exists using provided metadata."},
         {"role": "user", "content": f"Q: {payload.question}\nFrom: {ctx.get('from_title','')} ({payload.from_uid})\nTo: {ctx.get('to_title','')} ({payload.to_uid})\nRelation: {ctx.get('rel','')}\nProps: {ctx.get('props',{})}"}

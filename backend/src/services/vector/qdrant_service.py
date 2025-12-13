@@ -1,11 +1,10 @@
 from typing import List, Tuple
-import os
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import PointStruct, VectorParams, Distance
 from openai import AsyncOpenAI
+from src.config.settings import settings
 
-QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
-client = QdrantClient(url=QDRANT_URL)
+client = QdrantClient(url=str(settings.qdrant_url))
 COLLECTION = "concepts"
 try:
     if COLLECTION not in [c.name for c in client.get_collections().collections]:
@@ -15,7 +14,7 @@ try:
         )
 except Exception:
     pass
-oai = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
+oai = AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value())
 async def embed_text(text: str) -> List[float]:
     resp = await oai.embeddings.create(model="text-embedding-3-small", input=text)
     return resp.data[0].embedding

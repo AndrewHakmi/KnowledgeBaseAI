@@ -1,5 +1,9 @@
+name: knowledgebase
+
 services:
   traefik:
+    env_file:
+      - ${ENV_FILE:-.env.dev}
     image: traefik:v3.0
     command:
       - --configFile=/etc/traefik/traefik.yml
@@ -23,9 +27,11 @@ services:
       - "traefik.http.routers.traefik.middlewares=dashboard-auth"
 
   frontend:
+    env_file:
+      - ${ENV_FILE:-.env.dev}
     build:
       context: ./frontend
-      dockerfile: Dockerfile.frontend
+      dockerfile: Dockerfile
     labels:
       - "traefik.enable=true"
       - "traefik.http.services.frontend-svc.loadbalancer.server.port=80"
@@ -64,16 +70,11 @@ services:
       - "traefik.http.routers.frontend-dev-stud-sec.tls.certresolver=le"
 
   fastapi:
+    env_file:
+      - ${ENV_FILE:-.env.dev}
     build:
       context: ./backend
       dockerfile: Dockerfile.fastapi
-    environment:
-      NEO4J_URI: ${NEO4J_URI}
-      NEO4J_USER: ${NEO4J_USER}
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      PG_DSN: ${PG_DSN}
-      QDRANT_URL: ${QDRANT_URL}
     volumes:
       - ./backend:/app
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
@@ -98,6 +99,8 @@ services:
       - "traefik.http.routers.fastapi-xteam-sec.tls.certresolver=le"
 
   redis:
+    env_file:
+      - ${ENV_FILE:-.env.dev}
     image: redis:7
     restart: unless-stopped
     ports:
@@ -151,6 +154,8 @@ services:
       - "traefik.tcp.routers.neo4j-bolt.tls=true"
 
   postgres:
+    env_file:
+      - ${ENV_FILE:-.env.dev}
     image: postgres:15
     restart: unless-stopped
     environment:
@@ -163,6 +168,8 @@ services:
       - "traefik.enable=false"
 
   qdrant:
+    env_file:
+      - ${ENV_FILE:-.env.dev}
     image: qdrant/qdrant:latest
     restart: unless-stopped
     environment:

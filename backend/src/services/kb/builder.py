@@ -3,6 +3,7 @@ import json
 import requests
 import asyncio
 from typing import Dict, List, Tuple, Optional
+from src.config.settings import settings
 from .jsonl_io import load_jsonl, append_jsonl, rewrite_jsonl, get_path, tokens, make_uid, normalize_skill_topics_to_topic_skills, normalize_kb
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,10 +26,10 @@ def openai_chat(messages: List[Dict], model: str = 'gpt-4o-mini', temperature: f
                                 os.environ[k] = v
             except Exception:
                 pass
-    key = os.getenv('OPENAI_API_KEY')
+    key = settings.openai_api_key.get_secret_value()
     if not key:
         _load_env_file()
-        key = os.getenv('OPENAI_API_KEY')
+        key = settings.openai_api_key.get_secret_value()
     if not key:
         return {'ok': False, 'error': 'missing OPENAI_API_KEY'}
     url = 'https://api.openai.com/v1/chat/completions'
@@ -59,10 +60,10 @@ async def openai_chat_async(messages: List[Dict], model: str = 'gpt-4o-mini', te
                                 os.environ[k] = v
             except Exception:
                 pass
-    key = os.getenv('OPENAI_API_KEY')
+    key = settings.openai_api_key.get_secret_value()
     if not key:
         _load_env_file()
-        key = os.getenv('OPENAI_API_KEY')
+        key = settings.openai_api_key.get_secret_value()
     if not key:
         return {'ok': False, 'error': 'missing OPENAI_API_KEY'}
     url = 'https://api.openai.com/v1/chat/completions'

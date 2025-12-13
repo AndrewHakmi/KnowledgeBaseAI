@@ -3,6 +3,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def test_env(monkeypatch):
+    monkeypatch.setenv('APP_ENV', 'dev')
     monkeypatch.setenv('OPENAI_API_KEY', 'test')
     monkeypatch.setenv('NEO4J_URI', os.getenv('NEO4J_URI',''))
     monkeypatch.setenv('NEO4J_USER', os.getenv('NEO4J_USER',''))

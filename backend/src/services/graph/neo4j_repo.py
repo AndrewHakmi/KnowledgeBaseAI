@@ -1,21 +1,22 @@
-import os
 import time
 from typing import List, Dict, Tuple, Callable, Any, Optional
 from neo4j import GraphDatabase
+from src.config.settings import settings
+
 
 def get_driver():
-    uri = os.getenv('NEO4J_URI')
-    user = os.getenv('NEO4J_USER')
-    password = os.getenv('NEO4J_PASSWORD')
+    uri = settings.neo4j_uri
+    user = settings.neo4j_user
+    password = settings.neo4j_password.get_secret_value()
     if not (uri and user and password):
-        raise RuntimeError('Missing Neo4j env')
+        raise RuntimeError('Missing Neo4j connection environment variables')
     return GraphDatabase.driver(uri, auth=(user, password))
 
 class Neo4jRepo:
     def __init__(self, uri: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None, max_retries: int = 3, backoff_sec: float = 0.8):
-        self.uri = uri or os.getenv('NEO4J_URI')
-        self.user = user or os.getenv('NEO4J_USER')
-        self.password = password or os.getenv('NEO4J_PASSWORD')
+        self.uri = uri or settings.neo4j_uri
+        self.user = user or settings.neo4j_user
+        self.password = password or settings.neo4j_password.get_secret_value()
         if not self.uri or not self.user or not self.password:
             raise RuntimeError('Missing Neo4j connection environment variables')
         self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))

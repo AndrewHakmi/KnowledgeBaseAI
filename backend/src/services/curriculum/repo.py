@@ -1,13 +1,12 @@
-import os
 import psycopg2
 from typing import Dict, List, Optional
-
-DB_DSN = os.getenv('PG_DSN')
+from src.config.settings import settings
 
 def get_conn():
-    if not DB_DSN:
+    dsn = str(settings.pg_dsn) if settings.pg_dsn else ""
+    if not dsn:
         return None
-    return psycopg2.connect(DB_DSN)
+    return psycopg2.connect(dsn)
 
 def create_curriculum(code: str, title: str, standard: str, language: str) -> Dict:
     conn = get_conn()

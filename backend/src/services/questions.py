@@ -2,6 +2,7 @@ import os
 import json
 from functools import lru_cache
 from typing import Dict, List, Set
+from src.config.settings import settings
 from src.services.graph.neo4j_repo import Neo4jRepo
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,7 +44,7 @@ def select_examples_for_topics(
 ):
     exclude = exclude_uids or set()
     pool: List[Dict] = []
-    if os.getenv('NEO4J_URI') and os.getenv('NEO4J_USER') and os.getenv('NEO4J_PASSWORD'):
+    if settings.neo4j_uri and settings.neo4j_user and settings.neo4j_password.get_secret_value():
         try:
             repo = Neo4jRepo()
             rows = repo.read(

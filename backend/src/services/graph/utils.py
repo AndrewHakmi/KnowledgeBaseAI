@@ -2,6 +2,7 @@ import os
 import json
 from typing import Dict, List
 from neo4j import GraphDatabase
+from src.config.settings import settings
 from src.services.graph.neo4j_repo import Neo4jRepo, get_driver
 from src.services.kb.jsonl_io import load_jsonl, get_path
 from src.services.kb.jsonl_io import normalize_skill_topics_to_topic_skills
@@ -13,7 +14,7 @@ def compute_user_weight(base_weight: float, score: float) -> float:
 
 def compute_topic_user_weight(topic_uid: str, score: float, base_weight: float | None = None) -> Dict:
     if base_weight is None:
-        if not (os.getenv('NEO4J_URI') and os.getenv('NEO4J_USER') and os.getenv('NEO4J_PASSWORD')):
+        if not (settings.neo4j_uri and settings.neo4j_user and settings.neo4j_password.get_secret_value()):
             base_weight = 0.5
         else:
             try:
@@ -27,7 +28,7 @@ def compute_topic_user_weight(topic_uid: str, score: float, base_weight: float |
 
 def compute_skill_user_weight(skill_uid: str, score: float, base_weight: float | None = None) -> Dict:
     if base_weight is None:
-        if not (os.getenv('NEO4J_URI') and os.getenv('NEO4J_USER') and os.getenv('NEO4J_PASSWORD')):
+        if not (settings.neo4j_uri and settings.neo4j_user and settings.neo4j_password.get_secret_value()):
             base_weight = 0.5
         else:
             try:
@@ -299,7 +300,7 @@ def build_adaptive_roadmap(subject_uid: str | None = None, limit: int = 50) -> L
     return roadmap
 
 def build_user_roadmap_stateless(subject_uid: str | None, user_topic_weights: Dict[str, float], user_skill_weights: Dict[str, float] | None = None, limit: int = 50, penalty_factor: float = 0.15) -> List[Dict]:
-    if not (os.getenv('NEO4J_URI') and os.getenv('NEO4J_USER') and os.getenv('NEO4J_PASSWORD')):
+    if not (settings.neo4j_uri and settings.neo4j_user and settings.neo4j_password.get_secret_value()):
         topics = load_jsonl(get_path('topics.jsonl'))
         sections = load_jsonl(get_path('sections.jsonl'))
         subj_by_section = {s.get('uid'): s.get('subject_uid') for s in sections}
@@ -396,18 +397,24 @@ def update_user_skill_weight(user_id: str, skill_uid: str, score: float) -> Dict
     return {"user_id": user_id, **res}
 
 def get_user_topic_level(user_id: str, topic_uid: str) -> Dict:
-    repo = Neo4jRepo()
-    rows = repo.read("MATCH (t:Topic {uid:$uid}) RETURN t.title AS title, coalesce(t.dynamic_weight,t.static_weight,0.5) AS bw", {"uid": topic_uid})
-    repo.close()
+    try:
+        repo = Neo4jRepo()
+        rows = repo.read("MATCH (t:Topic {uid:$uid}) RETURN t.title AS title, coalesce(t.dynamic_weight,t.static_weight,0.5) AS bw", {"uid": topic_uid})
+        repo.close()
+    except Exception:
+        rows = []
     if not rows:
         return {"uid": topic_uid, "user_id": user_id, "title": None, "base_weight": 0.5, "level": knowledge_level_from_weight(0.5)}
     bw = float(rows[0]["bw"] or 0.5)
     return {"uid": topic_uid, "user_id": user_id, "title": rows[0]["title"], "base_weight": bw, "level": knowledge_level_from_weight(bw)}
 
 def get_user_skill_level(user_id: str, skill_uid: str) -> Dict:
-    repo = Neo4jRepo()
-    rows = repo.read("MATCH (s:Skill {uid:$uid}) RETURN s.title AS title, coalesce(s.dynamic_weight,s.static_weight,0.5) AS bw", {"uid": skill_uid})
-    repo.close()
+    try:
+        repo = Neo4jRepo()
+        rows = repo.read("MATCH (s:Skill {uid:$uid}) RETURN s.title AS title, coalesce(s.dynamic_weight,s.static_weight,0.5) AS bw", {"uid": skill_uid})
+        repo.close()
+    except Exception:
+        rows = []
     if not rows:
         return {"uid": skill_uid, "user_id": user_id, "title": None, "base_weight": 0.5, "level": knowledge_level_from_weight(0.5)}
     bw = float(rows[0]["bw"] or 0.5)
