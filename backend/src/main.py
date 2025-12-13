@@ -17,6 +17,8 @@ try:
 except Exception:
     graphql_router = None
 from src.api.validation import router as validation_router
+from src.api.auth import router as auth_router
+from src.services.auth.users_repo import ensure_bootstrap_admin
 try:
     from prometheus_client import Counter, Histogram
 except Exception:
@@ -39,6 +41,7 @@ LATENCY = Histogram("http_request_latency_ms", "Request latency ms")
 async def on_startup():
     setup_logging()
     logger.info("startup", neo4j_uri=settings.neo4j_uri)
+    ensure_bootstrap_admin()
 
 @app.middleware("http")
 async def metrics_middleware(request, call_next):
@@ -63,4 +66,5 @@ app.include_router(levels_router)
 app.include_router(maintenance_router)
 if graphql_router:
     app.include_router(graphql_router, prefix="/v1/graphql")
+app.include_router(auth_router)
 app.include_router(validation_router)

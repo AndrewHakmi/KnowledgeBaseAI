@@ -40,6 +40,13 @@ class Settings(BaseSettings):
 
     admin_api_key: SecretStr = Field(default=SecretStr(""), alias="ADMIN_API_KEY")
 
+    jwt_secret_key: SecretStr = Field(default=SecretStr(""), alias="JWT_SECRET_KEY")
+    jwt_access_ttl_seconds: int = Field(default=900, alias="JWT_ACCESS_TTL_SECONDS")
+    jwt_refresh_ttl_seconds: int = Field(default=1209600, alias="JWT_REFRESH_TTL_SECONDS")
+
+    bootstrap_admin_email: str = Field(default="", alias="BOOTSTRAP_ADMIN_EMAIL")
+    bootstrap_admin_password: SecretStr = Field(default=SecretStr(""), alias="BOOTSTRAP_ADMIN_PASSWORD")
+
     kb_domain: str = Field(default="", alias="KB_DOMAIN")
     kb_alt_domain: str = Field(default="", alias="KB_ALT_DOMAIN")
     letsencrypt_email: str = Field(default="", alias="LETSENCRYPT_EMAIL")

@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Dict, List
 from src.services.curriculum.repo import create_curriculum, add_curriculum_nodes, get_graph_view
+from src.api.deps import require_admin
 
-router = APIRouter(prefix="/v1/admin")
+router = APIRouter(prefix="/v1/admin", dependencies=[Depends(require_admin)])
 
 class CreateCurriculumInput(BaseModel):
     code: str
