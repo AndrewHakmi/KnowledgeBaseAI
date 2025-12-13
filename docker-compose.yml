@@ -88,6 +88,30 @@ services:
       - "traefik.http.routers.fastapi-xteam-sec.tls=true"
       - "traefik.http.routers.fastapi-xteam-sec.tls.certresolver=le"
 
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    labels:
+      - "traefik.enable=false"
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=false"
+    command:
+      - --web.enable-remote-write-receiver
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    labels:
+      - "traefik.enable=false"
+
   neo4j:
     image: neo4j:5.21
     restart: unless-stopped

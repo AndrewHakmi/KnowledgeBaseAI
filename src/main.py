@@ -5,6 +5,7 @@ from src.core.config import settings
 from src.api.graph import router as graph_router
 from src.api.construct import router as construct_router
 from src.api.analytics import router as analytics_router
+from src.api.ws import router as ws_router
 from prometheus_client import Counter, Histogram
 
 app = FastAPI(title="Headless Knowledge Graph Platform")
@@ -31,3 +32,4 @@ async def health():
 app.include_router(graph_router)
 app.include_router(construct_router)
 app.include_router(analytics_router)
+app.include_router(ws_router)
