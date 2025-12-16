@@ -365,7 +365,7 @@
 - Embeddings Layer
   - [x] Определить `EmbeddingProvider` интерфейс и DI (`backend/src/services/embeddings/provider.py`)
   - [x] Реализовать режимы `hash(dev)` и `model(prod)` (ENV: `EMBEDDINGS_MODE=model|hash`)
-  - [ ] Версионировать Qdrant коллекции и добавить миграции (`backend/scripts/apply_vector_schema.py`)
+  - [x] Версионировать Qdrant коллекции и добавить миграции (`backend/scripts/apply_vector_schema.py`, `settings.QDRANT_COLLECTION`, `QDRANT_DEFAULT_VECTOR_DIM`)
 
 - Integrity Gate
   - [x] Расширить правила BASED_ON: обязательность/кратность для `Skill` и метрики по типам нарушений (`backend/src/services/integrity.py` + commit gate, ENV min/max)
