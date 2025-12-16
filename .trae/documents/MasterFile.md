@@ -397,5 +397,5 @@
   - [x] Протокольный трейс от edge до Neo4j (correlation_id propagation & logs)
 
 - Tests & CI
-  - [ ] Покрыть outbox, компенсации и недоставку события интеграционными тестами (`backend/tests/integration/test_outbox_delivery.py`)
+  - [x] Покрыть outbox, компенсации и недоставку события интеграционными тестами (`backend/tests/integration/test_outbox_delivery.py`)
   - [ ] Обновить CI для запуска новых тестов и метрик (`.github/workflows/ci.yml`)
