@@ -74,3 +74,13 @@ export async function postChat(body: { question: string; from_uid: string; to_ui
     body: JSON.stringify(body),
   })
 }
+
+export type AnalyticsStats = {
+  graph: { total_nodes: number; avg_out_degree: number; density: number }
+  ai: { tokens_input: number; tokens_output: number; cost_usd: number; latency_ms: number }
+  quality: { orphans: number; auto_merged: number }
+}
+
+export async function getAnalyticsStats() {
+  return apiFetch<AnalyticsStats>(`/v1/analytics/stats`)
+}

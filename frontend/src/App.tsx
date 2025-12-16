@@ -5,6 +5,7 @@ import EditPage from './pages/EditPage'
 import PracticePage from './pages/PracticePage'
 import RoadmapPage from './pages/RoadmapPage'
 import SettingsPage from './pages/SettingsPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 import { postChat } from './api'
 
 type ChatMessage = {
@@ -55,6 +56,7 @@ export default function App() {
       [
         { to: '/', title: 'Explore (vis-network)' },
         { to: '/edit', title: 'Edit (React Flow)' },
+        { to: '/analytics', title: 'Аналитика' },
         { to: '/roadmap', title: 'Дорожная карта' },
         { to: '/practice', title: 'Практика' },
         { to: '/settings', title: 'Настройки' },
@@ -184,6 +186,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<ExplorePage selectedUid={selectedUid} onSelectUid={setSelectedUid} />} />
               <Route path="/edit" element={<EditPage selectedUid={selectedUid} onSelectUid={setSelectedUid} />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/roadmap" element={<RoadmapPage selectedUid={selectedUid} />} />
               <Route path="/practice" element={<PracticePage />} />
               <Route path="/settings" element={<SettingsPage />} />
