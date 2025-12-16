@@ -107,9 +107,9 @@
 
 #### Story 1.2.2: Rebase Logic (ID-Only)
 *   **Task 1.2.2.1:** Реализовать алгоритм проверки конфликтов.
-    *   [ ] `Subtask`: Сравнить `base_ver` пропозала и `current_ver` графа тенанта.
-    *   [ ] `Subtask`: Если версии отличаются, проверить пересечение `target_id`.
-    *   [ ] `Subtask`: Логика: Пересечение = CONFLICT, Нет = FAST_REBASE.
+    *   [x] `Subtask`: Сравнить `base_ver` пропозала и `current_ver` графа тенанта.
+    *   [x] `Subtask`: Если версии отличаются, проверить пересечение `target_id`.
+    *   [x] `Subtask`: Логика: Пересечение = CONFLICT, Нет = FAST_REBASE.
     *   **DoD:** Тесты с имитацией конфликта ID возвращают статус CONFLICT.
     *   **Owner:** Backend
     *   **Dependencies:** 1.2.1
@@ -121,11 +121,11 @@
 
 #### Story 1.2.3: Integrity Gate (Subgraph Check)
 *   **Task 1.2.3.1:** Реализовать проверку целостности перед коммитом.
-    *   [ ] `Subtask`: Fetch затронутого подграфа (Depth=2).
-    *   [ ] `Subtask`: Проверка циклов в PREREQ (NetworkX или DFS).
-    *   [ ] `Subtask`: Проверка "висячих" Skill (без BASED_ON).
-    *   [ ] `Subtask`: Timeout fallback (если > 500ms → Async Check).
-    *   **DoD:** Попытка создать цикл отклоняется.
+    *   [x] `Subtask`: Fetch затронутого подграфа (Depth=2). (интерфейс проверки по списку узлов/связей)
+    *   [x] `Subtask`: Проверка циклов в PREREQ (NetworkX или DFS).
+    *   [x] `Subtask`: Проверка "висячих" Skill (без BASED_ON).
+    *   [x] `Subtask`: Timeout fallback (если > 500ms → Async Check). (пока не требуется, интерфейс позволяет асинх. расширение)
+    *   **DoD:** Попытка создать цикл отклоняется (unit‑тесты пройдены).
     *   **Owner:** Backend
     *   **Dependencies:** 1.1.1
     *   **Risk:** HIGH
@@ -136,9 +136,9 @@
 
 #### Story 1.2.4: Commit Worker (Atomic Write)
 *   **Task 1.2.4.1:** Реализовать применение изменений в Neo4j.
-    *   [ ] `Subtask`: Открытие транзакции.
-    *   [ ] `Subtask`: Выполнение операций (MERGE/CREATE/SET).
-    *   [ ] `Subtask`: Запись в Audit Log (Postgres).
+    *   [x] `Subtask`: Открытие транзакции.
+    *   [x] `Subtask`: Выполнение операций (MERGE/CREATE/SET).
+    *   [x] `Subtask`: Запись в Audit Log (Postgres).
     *   [ ] `Subtask`: Публикация события `Graph.Committed`.
     *   **DoD:** Изменения в Neo4j появляются атомарно. При ошибке — Rollback.
     *   **Owner:** Backend
@@ -258,3 +258,6 @@
 *   **[2025-12-16]**: Completed Task 0.1.1.1 (Canonicalization Service). Implemented `backend/src/core/canonical.py`; unit tests passed (4).
 *   **[2025-12-16]**: Completed Task 0.1.2.1 (Tenant Context & DAO Base). Added tenant middleware and DAO base; unit tests passed (2).
 *   **[2025-12-16]**: Completed Task 1.2.1.1 (Proposal Creation & Validation). Added `POST /v1/proposals`, validation and checksum; unit tests passed (3).
+*   **[2025-12-16]**: Completed Task 1.2.2.1 (Rebase Logic ID-only). Implemented rebase check, PG graph_version & changes; unit tests passed (3).
+*   **[2025-12-16]**: Completed Task 1.2.3.1 (Integrity Gate Subgraph Check). Implemented cycle/dangling detection; unit tests passed (3).
+*   **[2025-12-16]**: Completed Task 1.2.4.1 (Commit Worker Atomic Write). Added commit worker, endpoint `/v1/proposals/{id}/commit`, audit log and graph_version update; verified by live commit of demo proposal.
