@@ -263,6 +263,10 @@
 *   **[2025-12-16]**: Completed Task (AST Guard). Added AST‑guard test to detect Cypher writes outside whitelist; passed.
 *   **[2025-12-16]**: Completed Task (Tenant Schema Gatekeeper). Added `schema_version_tenant`, updated gatekeeper and tenant test; passed.
 *   **[2025-12-16]**: Completed Task (Diff REL Context). Added from/to node context to relation items in Diff; test passed.
+*   **[2025-12-16]**: Completed Task (Proposals created_at & sort). Added `created_at` column to proposals, list sorted by created_at; unit test passed.
+*   **[2025-12-16]**: Completed Task (Ingestion Latency Metric). Added Prometheus histogram `ingestion_latency_ms` around Qdrant upsert.
+*   **[2025-12-16]**: Completed Task (HTTP Metrics & Tracing). Labeled HTTP metrics and Neo4j correlation logs.
+*   **[2025-12-16]**: Completed Task (Integrity ASYNC Worker). Added worker to process `ASYNC_CHECK_REQUIRED` proposals and mark `READY`/`FAILED`; unit test passed.
 
 *Агент должен вести лог здесь после каждого выполненного Task.*
 
@@ -395,4 +399,3 @@
 - Tests & CI
   - [ ] Покрыть outbox, компенсации и недоставку события интеграционными тестами (`backend/tests/integration/test_outbox_delivery.py`)
   - [ ] Обновить CI для запуска новых тестов и метрик (`.github/workflows/ci.yml`)
-
