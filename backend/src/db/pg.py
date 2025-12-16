@@ -25,6 +25,8 @@ def ensure_tables():
             )
             """
         )
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_proposals_tenant_status ON proposals (tenant_id, status)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_proposals_created_at ON proposals (created_at DESC)")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS audit_log (
@@ -38,6 +40,7 @@ def ensure_tables():
             )
             """
         )
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_proposal_id ON audit_log (proposal_id)")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS tenant_graph_version (
