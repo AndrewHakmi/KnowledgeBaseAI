@@ -337,9 +337,10 @@
   - `backend/src/db/pg.py:137–152`
   - [x] Проблема: `get_proposal`/`set_proposal_status` без индексов по `tenant_id/status`.
   - [x] Исправление: добавить индексы `proposal(tenant_id, status, created_at)` и `audit_log(proposal_id)`; добавить `created_at`.
+- DB
   - `backend/src/db/pg.py:96–105`
-    - Проблема: выборка `graph_changes` не ограничивает тип изменений.
-    - Исправление: при необходимости добавить поле `change_type` и фильтр по нему (например, NODE/REL/PROPERTY).
+    - [x] Проблема: выборка `graph_changes` не ограничивает тип изменений.
+    - [x] Исправление: добавить поле `change_type` и фильтр по нему (например, NODE/REL/PROPERTY).
 
 - Frontend
   - `frontend/src/pages/*`
@@ -377,7 +378,7 @@
 
 - Vector Sync
   - [x] Унифицировать размерность `kb_entities` в mark/rescore (`backend/src/workers/vector_sync.py`)
-  - [ ] Добавить тест на несоответствие размерности и автокоррекцию (`backend/tests/unit/test_vector_dimension_consistency.py`)
+  - [x] Добавить тест на несоответствие размерности и автокоррекцию (`backend/tests/unit/test_vector_dimension_consistency.py`)
 
 - Schema Gatekeeper
   - [x] Перейти на `schema_version` per‑tenant (`backend/src/db/pg.py`)
