@@ -381,7 +381,7 @@
 
 - Schema Gatekeeper
   - [x] Перейти на `schema_version` per‑tenant (`backend/src/db/pg.py`)
-  - [ ] Общий миграционный скрипт и строгая проверка на старте (`backend/src/core/migrations.py`)
+  - [x] Строгая проверка на старте (`backend/src/core/migrations.py` + `backend/src/main.py@startup`)
 
 - API & Diff
   - [x] Улучшить `/v1/proposals` сортировку и фильтры (по `created_at`, статусам) (`backend/src/api/proposals.py` + `backend/src/db/pg.py`)
