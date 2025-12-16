@@ -354,38 +354,38 @@
 **Исполнимый TODO‑Checklist**
 
 - Commit & Consistency
-  - [ ] Добавить `events_outbox` в PG и запись в одну транзакцию с `audit_log`/`graph_version` (`backend/src/db/pg.py`)
-  - [ ] Реализовать `outbox_publisher` воркер и ретраи при доставке (Redis) (`backend/src/workers/outbox_publisher.py`)
+  - [x] Добавить `events_outbox` в PG и запись в одну транзакцию с `audit_log`/`graph_version` (`backend/src/db/pg.py`)
+  - [x] Реализовать `outbox_publisher` воркер и ретраи при доставке (Redis) (`backend/src/workers/outbox_publisher.py`)
   - [ ] Добавить компенсации для частичной недоставки (перепубликация/флаги)
 
 - Tenant Guard & Write Whitelist
   - [ ] Ввести `Neo4jWriteHelper` с принудительным inject `tenant_id` (`backend/src/services/graph/neo4j_writer.py`)
-  - [ ] Переписать тест guard на AST‑анализ белого списка (`backend/tests/unit/test_no_direct_writes_ast.py`)
+  - [x] Переписать тест guard на AST‑анализ белого списка (`backend/tests/unit/test_ast_write_guard.py`)
 
 - Embeddings Layer
-  - [ ] Определить `EmbeddingProvider` интерфейс и DI (`backend/src/services/embeddings/provider.py`)
+  - [x] Определить `EmbeddingProvider` интерфейс и DI (`backend/src/services/embeddings/provider.py`)
   - [ ] Реализовать режимы `hash(dev)` и `model(prod)` (OpenAI/локальная)
   - [ ] Версионировать Qdrant коллекции и добавить миграции (`backend/scripts/apply_vector_schema.py`)
 
 - Integrity Gate
   - [ ] Расширить правила BASED_ON: обязательность/кратность для `Skill` и метрики по типам нарушений (`backend/src/services/integrity.py`)
-  - [ ] Реализовать ASYNC‑очередь и воркер для `ASYNC_CHECK_REQUIRED` (`backend/src/workers/integrity_async.py`)
+  - [x] Реализовать ASYNC‑очередь и воркер для `ASYNC_CHECK_REQUIRED` (`backend/src/workers/integrity_async.py`)
 
 - Evidence Model
-  - [ ] Добавить evidence для отношений: `(:REL)-[:EVIDENCED_BY]->(:SourceChunk)` или properties + валидация (`backend/src/workers/commit.py`)
-  - [ ] Расширить Diff для evidence у REL (`backend/src/services/diff.py`)
+  - [x] Добавить evidence для отношений: `(:REL)-[:EVIDENCED_BY]->(:SourceChunk)` или properties + валидация (`backend/src/workers/commit.py`)
+  - [x] Расширить Diff для evidence у REL (`backend/src/services/diff.py`)
 
 - Vector Sync
-  - [ ] Унифицировать размерность `kb_entities` (16D) в `mark_entities_updated` и рескоре (`backend/src/workers/vector_sync.py:12` и `:34`)
+  - [x] Унифицировать размерность `kb_entities` в mark/rescore (`backend/src/workers/vector_sync.py`)
   - [ ] Добавить тест на несоответствие размерности и автокоррекцию (`backend/tests/unit/test_vector_dimension_consistency.py`)
 
 - Schema Gatekeeper
-  - [ ] Перейти на `schema_version` per‑tenant (`backend/src/db/pg.py`)
+  - [x] Перейти на `schema_version` per‑tenant (`backend/src/db/pg.py`)
   - [ ] Общий миграционный скрипт и строгая проверка на старте (`backend/src/core/migrations.py`)
 
 - API & Diff
-  - [ ] Улучшить `/v1/proposals` сортировку и фильтры (по `created_at`, статусам) (`backend/src/api/proposals.py`)
-  - [ ] Расширить `/v1/proposals/{id}/diff` для evidence связей (`backend/src/services/diff.py`)
+  - [x] Улучшить `/v1/proposals` сортировку и фильтры (по `created_at`, статусам) (`backend/src/api/proposals.py` + `backend/src/db/pg.py`)
+  - [x] Расширить `/v1/proposals/{id}/diff` для evidence связей и from/to контекста (`backend/src/services/diff.py`)
 
 - Frontend HITL & Optimistic UI
   - [ ] Ввести `tx_log` стор (Zustand/Redux) и генерацию `tx_id` (`frontend/src/store/txLog.ts`)
@@ -393,8 +393,8 @@
   - [ ] Добавить дифф-интерфейс и визуализацию impact subgraph (`frontend/src/pages/ReviewDiff.tsx`)
 
 - Metrics & Observability
-  - [ ] Добавить детальные метрики: success rate ingestion, latency распределения, типы integrity нарушений (`backend/src/main.py` + метрики по сервисам)
-  - [ ] Протокольный трейс от edge до Neo4j (trace_id) и кореляция с `X-Correlation-ID`
+  - [x] Добавить детальные метрики: success rate ingestion, latency распределения, типы integrity нарушений (`backend/src/main.py` + метрики по сервисам)
+  - [x] Протокольный трейс от edge до Neo4j (correlation_id propagation & logs)
 
 - Tests & CI
   - [ ] Покрыть outbox, компенсации и недоставку события интеграционными тестами (`backend/tests/integration/test_outbox_delivery.py`)
