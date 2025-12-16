@@ -7,7 +7,7 @@ from src.db.pg import (
     add_graph_change,
 )
 from src.services.rebase import rebase_check, RebaseResult
-from src.services.integrity import integrity_check_subgraph, check_prereq_cycles, check_dangling_skills
+from src.services.integrity import integrity_check_subgraph, check_prereq_cycles, check_dangling_skills, check_skill_based_on_rules
 from src.services.graph.neo4j_repo import get_driver
 from src.events.publisher import publish_graph_committed
 from src.services.graph.neo4j_writer import merge_node, update_node, merge_rel, update_rel
@@ -19,6 +19,7 @@ try:
     INTEGRITY_VIOLATION_TOTAL = Counter("integrity_violation_total", "Integrity gate violations total", ["type"])
     PROPOSAL_AUTOREBASE_TOTAL = Counter("proposal_auto_rebase_total", "Auto rebase (fast) proposals total")
     INTEGRITY_CHECK_LATENCY_MS = Histogram("integrity_check_latency_ms", "Integrity check latency ms")
+    INTEGRITY_BASE_RULE_VIOLATION_TOTAL = Counter("integrity_base_rule_violation_total", "Skill BASED_ON rule violations", ["kind"])
 except Exception:
     class _Dummy: 
         def inc(self, *args, **kwargs): ...
@@ -30,6 +31,7 @@ except Exception:
     INTEGRITY_VIOLATION_TOTAL = _Dummy()
     PROPOSAL_AUTOREBASE_TOTAL = _Dummy()
     INTEGRITY_CHECK_LATENCY_MS = _Dummy()
+    INTEGRITY_BASE_RULE_VIOLATION_TOTAL = _Dummy()
 
 def _load_proposal(proposal_id: str) -> Dict | None:
     ensure_tables()
@@ -154,6 +156,17 @@ def commit_proposal(proposal_id: str) -> Dict:
                 _update_proposal_status(proposal_id, "FAILED")
                 INTEGRITY_VIOLATION_TOTAL.labels(type="dangling_skill").inc()
                 return {"ok": False, "status": "FAILED", "violations": {"dangling_skills": dangling}}
+            min_req = int(os.environ.get("INTEGRITY_SKILL_BASE_MIN", "1"))
+            max_allowed_env = os.environ.get("INTEGRITY_SKILL_BASE_MAX", "")
+            max_allowed = int(max_allowed_env) if max_allowed_env.isdigit() else None
+            rules = check_skill_based_on_rules(nodes, based_on, min_required=min_req, max_allowed=max_allowed)
+            if not rules["ok"]:
+                _update_proposal_status(proposal_id, "FAILED")
+                if rules.get("too_few"):
+                    INTEGRITY_BASE_RULE_VIOLATION_TOTAL.labels(kind="too_few").inc()
+                if rules.get("too_many"):
+                    INTEGRITY_BASE_RULE_VIOLATION_TOTAL.labels(kind="too_many").inc()
+                return {"ok": False, "status": "FAILED", "violations": {"skill_base_rules": rules}}
         sleep_ms = int(os.environ.get("INTEGRITY_TEST_SLEEP_MS", "0"))
         if sleep_ms > 0:
             time.sleep(sleep_ms / 1000.0)
