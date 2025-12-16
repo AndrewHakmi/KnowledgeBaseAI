@@ -4,6 +4,7 @@ from src.schemas.proposal import Proposal, Operation, ProposalStatus
 from src.db.pg import get_conn, ensure_tables
 from src.services.proposal_service import create_draft_proposal
 from src.core.context import get_tenant_id
+from src.workers.commit import commit_proposal
 
 router = APIRouter(prefix="/v1/proposals")
 
@@ -22,6 +23,7 @@ async def create_proposal(payload: Dict, tenant_id: str = Depends(require_tenant
         p = create_draft_proposal(tenant_id, base_graph_version, ops)
         conn = get_conn()
         conn.autocommit = True
+        import json
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO proposals (proposal_id, tenant_id, base_graph_version, proposal_checksum, status, operations_json) VALUES (%s,%s,%s,%s,%s,%s)",
@@ -31,7 +33,7 @@ async def create_proposal(payload: Dict, tenant_id: str = Depends(require_tenant
                     p.base_graph_version,
                     p.proposal_checksum,
                     ProposalStatus.DRAFT.value,
-                    p.model_dump()["operations"],
+                    json.dumps(p.model_dump()["operations"]),
                 ),
             )
         conn.close()
@@ -40,3 +42,12 @@ async def create_proposal(payload: Dict, tenant_id: str = Depends(require_tenant
         raise HTTPException(status_code=422, detail=str(e))
     except Exception:
         raise HTTPException(status_code=500, detail="failed to create proposal")
+
+@router.post("/{proposal_id}/commit")
+async def commit(proposal_id: str, tenant_id: str = Depends(require_tenant)) -> Dict:
+    res = commit_proposal(proposal_id)
+    if not res.get("ok"):
+        status = res.get("status") or "FAILED"
+        code = 409 if status == "CONFLICT" else 400
+        raise HTTPException(status_code=code, detail=res)
+    return res
