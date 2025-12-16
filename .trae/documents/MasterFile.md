@@ -399,4 +399,4 @@
 
 - Tests & CI
   - [x] Покрыть outbox, компенсации и недоставку события интеграционными тестами (`backend/tests/integration/test_outbox_delivery.py`)
-  - [ ] Обновить CI для запуска новых тестов и метрик (`.github/workflows/ci.yml`)
+  - [x] Обновить CI для запуска новых тестов и метрик (`.github/workflows/ci.yml`)
