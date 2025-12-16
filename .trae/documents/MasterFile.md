@@ -368,7 +368,7 @@
   - [ ] Версионировать Qdrant коллекции и добавить миграции (`backend/scripts/apply_vector_schema.py`)
 
 - Integrity Gate
-  - [ ] Расширить правила BASED_ON: обязательность/кратность для `Skill` и метрики по типам нарушений (`backend/src/services/integrity.py`)
+  - [x] Расширить правила BASED_ON: обязательность/кратность для `Skill` и метрики по типам нарушений (`backend/src/services/integrity.py` + commit gate, ENV min/max)
   - [x] Реализовать ASYNC‑очередь и воркер для `ASYNC_CHECK_REQUIRED` (`backend/src/workers/integrity_async.py`)
 
 - Evidence Model
