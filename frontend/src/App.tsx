@@ -5,7 +5,8 @@ import EditPage from './pages/EditPage'
 import PracticePage from './pages/PracticePage'
 import RoadmapPage from './pages/RoadmapPage'
 import SettingsPage from './pages/SettingsPage'
-import { postChat } from './api'
+import AnalyticsPage from './pages/AnalyticsPage'
+import { assistantChat, type AssistantAction } from './api'
 
 type ChatMessage = {
   id: string
@@ -55,6 +56,7 @@ export default function App() {
       [
         { to: '/', title: 'Explore (vis-network)' },
         { to: '/edit', title: 'Edit (React Flow)' },
+        { to: '/analytics', title: 'Аналитика' },
         { to: '/roadmap', title: 'Дорожная карта' },
         { to: '/practice', title: 'Практика' },
         { to: '/settings', title: 'Настройки' },
@@ -70,6 +72,7 @@ export default function App() {
     if (hash === 'settings') navigate('/settings', { replace: true })
   }, [navigate])
 
+  const [action, setAction] = useState<AssistantAction | undefined>(undefined)
   async function sendChat() {
     const text = chatInput.trim()
     if (!text) return
@@ -79,7 +82,21 @@ export default function App() {
     setChatInput('')
 
     try {
-      const data = await postChat({ question: text, from_uid: selectedUid, to_uid: selectedUid })
+      const data = await assistantChat({
+        action,
+        message: text,
+        from_uid: selectedUid,
+        to_uid: selectedUid,
+        center_uid: selectedUid,
+        depth: 1,
+        subject_uid: selectedUid,
+        progress: {},
+        limit: 30,
+        count: 10,
+        difficulty_min: 1,
+        difficulty_max: 5,
+        exclude: [],
+      })
       const assistantText = typeof data === 'string' ? data : JSON.stringify(data)
 
       setMessages((prev) => [
@@ -184,6 +201,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<ExplorePage selectedUid={selectedUid} onSelectUid={setSelectedUid} />} />
               <Route path="/edit" element={<EditPage selectedUid={selectedUid} onSelectUid={setSelectedUid} />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/roadmap" element={<RoadmapPage selectedUid={selectedUid} />} />
               <Route path="/practice" element={<PracticePage />} />
               <Route path="/settings" element={<SettingsPage />} />
@@ -278,6 +296,14 @@ export default function App() {
           </div>
 
           <div style={{ padding: 12, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+            <select className="kb-input" value={action || ''} onChange={(e) => setAction((e.target.value || undefined) as AssistantAction | undefined)} style={{ maxWidth: 180 }}>
+              <option value="">Свободный ответ</option>
+              <option value="explain_relation">Объяснить связь</option>
+              <option value="viewport">Окрестность узла</option>
+              <option value="roadmap">Учебный план</option>
+              <option value="analytics">Аналитика</option>
+              <option value="questions">Вопросы</option>
+            </select>
             <input
               className="kb-input"
               value={chatInput}

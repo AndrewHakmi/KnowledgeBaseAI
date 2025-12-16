@@ -2,7 +2,9 @@ import asyncio
 from fastapi import FastAPI
 from src.core.logging import setup_logging, logger
 from src.config.settings import settings
+from src.core.context import extract_tenant_id_from_request, set_tenant_id
 from src.api.graph import router as graph_router
+from src.api.assistant import router as assistant_router
 from src.api.construct import router as construct_router
 from src.api.analytics import router as analytics_router
 from src.api.ws import router as ws_router
@@ -13,6 +15,7 @@ from src.api.admin_generate import router as admin_generate_router
 from src.api.admin_graph import router as admin_graph_router
 from src.api.levels import router as levels_router
 from src.api.maintenance import router as maintenance_router
+from src.api.proposals import router as proposals_router
 try:
     from src.api.graphql import router as graphql_router
 except Exception:
@@ -45,6 +48,13 @@ async def on_startup():
     ensure_bootstrap_admin()
 
 @app.middleware("http")
+async def tenant_middleware(request, call_next):
+    tid = extract_tenant_id_from_request(request)
+    set_tenant_id(tid)
+    resp = await call_next(request)
+    return resp
+
+@app.middleware("http")
 async def metrics_middleware(request, call_next):
     REQ_COUNTER.inc()
     with LATENCY.time():
@@ -56,6 +66,7 @@ async def health():
     return {"openai": bool(settings.openai_api_key.get_secret_value()), "neo4j": bool(settings.neo4j_uri)}
 
 app.include_router(graph_router)
+app.include_router(assistant_router)
 app.include_router(construct_router)
 app.include_router(analytics_router)
 app.include_router(ws_router)
@@ -66,6 +77,7 @@ app.include_router(admin_generate_router)
 app.include_router(admin_graph_router)
 app.include_router(levels_router)
 app.include_router(maintenance_router)
+app.include_router(proposals_router)
 if graphql_router:
     app.include_router(graphql_router, prefix="/v1/graphql")
 app.include_router(auth_router)
