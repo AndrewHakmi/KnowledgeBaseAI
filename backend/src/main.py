@@ -1,5 +1,6 @@
 import asyncio
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from src.core.logging import setup_logging, logger
 from src.config.settings import settings
 from src.core.context import extract_tenant_id_from_request, set_tenant_id
@@ -30,9 +31,11 @@ try:
 except Exception:
     class Counter:
         def __init__(self, *args, **kwargs): ...
-        def inc(self): ...
+        def labels(self, *args, **kwargs): return self
+        def inc(self, *args, **kwargs): ...
     class Histogram:
         def __init__(self, *args, **kwargs): ...
+        def labels(self, *args, **kwargs): return self
         class _Ctx:
             def __enter__(self): ...
             def __exit__(self, a, b, c): ...
@@ -40,8 +43,8 @@ except Exception:
 
 app = FastAPI(title="Headless Knowledge Graph Platform")
 
-REQ_COUNTER = Counter("http_requests_total", "Total HTTP requests")
-LATENCY = Histogram("http_request_latency_ms", "Request latency ms")
+REQ_COUNTER = Counter("http_requests_total", "Total HTTP requests", ["method", "path", "status"])
+LATENCY = Histogram("http_request_latency_ms", "Request latency ms", ["method", "path"])
 
 @app.on_event("startup")
 async def on_startup():
@@ -67,9 +70,14 @@ async def tenant_middleware(request, call_next):
 
 @app.middleware("http")
 async def metrics_middleware(request, call_next):
-    REQ_COUNTER.inc()
-    with LATENCY.time():
+    method = request.method
+    path = request.url.path
+    with LATENCY.labels(method=method, path=path).time():
         resp = await call_next(request)
+    try:
+        REQ_COUNTER.labels(method=method, path=path, status=str(resp.status_code)).inc()
+    except Exception:
+        ...
     return resp
 
 @app.get("/health")
@@ -81,6 +89,15 @@ async def metrics():
     from prometheus_client import generate_latest
     return generate_latest()
 
+origins = [o.strip() for o in (settings.cors_allow_origins or "").split(",") if o.strip()]
+if origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 app.include_router(graph_router)
 app.include_router(assistant_router)
 app.include_router(construct_router)

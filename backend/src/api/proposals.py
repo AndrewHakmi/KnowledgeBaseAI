@@ -5,8 +5,9 @@ from src.db.pg import get_conn, ensure_tables
 from src.services.proposal_service import create_draft_proposal
 from src.core.context import get_tenant_id
 from src.workers.commit import commit_proposal
-from src.db.pg import get_proposal, set_proposal_status
+from src.db.pg import get_proposal, set_proposal_status, list_proposals
 from src.services.diff import build_diff
+from src.services.impact import impact_subgraph_for_proposal
 
 router = APIRouter(prefix="/v1/proposals")
 
@@ -61,6 +62,11 @@ async def get(proposal_id: str, tenant_id: str = Depends(require_tenant)) -> Dic
         raise HTTPException(status_code=404, detail="proposal not found")
     return p
 
+@router.get("")
+async def list(status: str | None = None, limit: int = 20, offset: int = 0, tenant_id: str = Depends(require_tenant)) -> Dict:
+    items = list_proposals(tenant_id, status, limit, offset)
+    return {"items": items, "limit": limit, "offset": offset}
+
 @router.post("/{proposal_id}/approve")
 async def approve(proposal_id: str, tenant_id: str = Depends(require_tenant)) -> Dict:
     p = get_proposal(proposal_id)
@@ -88,3 +94,10 @@ async def diff(proposal_id: str, tenant_id: str = Depends(require_tenant)) -> Di
     if not p or p["tenant_id"] != tenant_id:
         raise HTTPException(status_code=404, detail="proposal not found")
     return build_diff(proposal_id)
+
+@router.get("/{proposal_id}/impact")
+async def impact(proposal_id: str, depth: int = 1, tenant_id: str = Depends(require_tenant)) -> Dict:
+    p = get_proposal(proposal_id)
+    if not p or p["tenant_id"] != tenant_id:
+        raise HTTPException(status_code=404, detail="proposal not found")
+    return impact_subgraph_for_proposal(proposal_id, depth=depth)
