@@ -7,14 +7,25 @@ from src.services.roadmap_planner import plan_route
 from src.api.analytics import stats as analytics_stats
 from src.services.questions import select_examples_for_topics, all_topic_uids_from_examples
 
-router = APIRouter(prefix="/v1/assistant")
+router = APIRouter(prefix="/v1/assistant", tags=["ИИ ассистент"])
 
 class ToolInfo(BaseModel):
     name: str
     description: str
 
-@router.get("/tools")
+@router.get(
+    "/tools",
+    summary="Список инструментов ассистента",
+    description="Возвращает перечень доступных возможностей ИИ-ассистента."
+)
 async def tools() -> Dict:
+    """
+    Принимает:
+      - нет входных параметров
+
+    Возвращает:
+      - tools: список объектов {name, description} доступных действий ассистента
+    """
     return {
         "tools": [
             {"name": "explain_relation", "description": "Объяснить связь между двумя узлами"},
@@ -42,10 +53,25 @@ class AssistantChatInput(BaseModel):
 
 @router.post(
     "/chat",
-    summary="AI Assistant Chat",
-    description="Unified endpoint for the AI Assistant. Can handle general Q&A or trigger specific actions (roadmap, analytics, etc.) based on the `action` field."
+    summary="Чат с ИИ-ассистентом",
+    description="Единая точка для ИИ-ассистента. Поддерживает общий диалог или выполнение действий (дорожная карта, аналитика и т.д.) через поле `action`."
 )
 async def chat(payload: AssistantChatInput) -> Dict:
+    """
+    Принимает:
+      - action: одно из [explain_relation, viewport, roadmap, analytics, questions] или None для свободного ответа
+      - message: текст вопроса
+      - context-поля: from_uid/to_uid/center_uid/depth/subject_uid/progress и параметры генерации
+
+    Возвращает:
+      - В зависимости от action:
+        - explain_relation: {answer, usage, context}
+        - viewport: {nodes, edges, center_uid, depth}
+        - roadmap: {items}
+        - analytics: метрики графа
+        - questions: {questions}
+      - Свободный ответ: {answer, usage}
+    """
     if payload.action == "explain_relation":
         if not payload.from_uid or not payload.to_uid:
             raise HTTPException(status_code=400, detail="from_uid/to_uid required")

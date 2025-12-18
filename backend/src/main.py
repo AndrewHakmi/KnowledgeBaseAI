@@ -43,40 +43,40 @@ except Exception:
 
 tags_metadata = [
     {
-        "name": "LMS Integration",
-        "description": "Endpoints for external LMS (StudyNinja) to consume the graph: roadmap planning, adaptive questions, and content navigation.",
+        "name": "Интеграция с LMS",
+        "description": "Методы для внешних систем (StudyNinja) для работы с графом: дорожная карта, адаптивные вопросы, навигация.",
     },
     {
-        "name": "AI Assistant",
-        "description": "Conversational interface and helper tools for explaining graph connections and generating content.",
+        "name": "ИИ ассистент",
+        "description": "Диалоговый интерфейс и инструменты для объяснения связей и генерации контента.",
     },
     {
-        "name": "Content Management",
-        "description": "Proposal system for safe, atomic, and reviewed graph mutations (Admin/Methodist tools).",
+        "name": "Управление контентом",
+        "description": "Система заявок (Proposals) для безопасных, атомарных и проверяемых изменений графа.",
     },
     {
-        "name": "Analytics",
-        "description": "Graph topology metrics and AI usage statistics.",
+        "name": "Аналитика",
+        "description": "Метрики структуры графа и статистика использования ИИ.",
     },
     {
-        "name": "System",
-        "description": "Health checks and Prometheus metrics.",
+        "name": "Система",
+        "description": "Проверка состояния и метрики Prometheus.",
     },
 ]
 
 app = FastAPI(
     title="KnowledgeBaseAI Engine",
     description="""
-# KnowledgeBaseAI Platform
+# Платформа KnowledgeBaseAI
 
-This is the core graph engine for the StudyNinja ecosystem. 
-It provides a **stateless knowledge graph** service that powers adaptive learning.
+Ядро графовой модели знаний для экосистемы StudyNinja. Предоставляет **бестейт-сервис** работы с графом,
+который используется для адаптивного обучения и аналитики качества контента.
 
-## Key Concepts
+## Ключевые принципы
 
-* **LMS Integration**: Use `/v1/graph/*` endpoints to build learning paths and fetch questions.
-* **Proposals**: All writes go through a Proposal -> Review -> Commit pipeline (`/v1/proposals`).
-* **Tenancy**: Multi-tenancy is enforced via `X-Tenant-ID` header (defaulting to 'public' if not set in some modes, but required for writes).
+* **Интеграция с LMS**: используйте эндпойнты `/v1/graph/*` для построения дорожной карты и выбора вопросов.
+* **Proposals**: любые изменения графа проходят через конвейер Заявка → Ревью → Коммит (`/v1/proposals`).
+* **Мультитенантность**: `X-Tenant-ID` обязателен для записей и админ-операций; для чтения может быть по умолчанию.
     """,
     version="1.0.0",
     openapi_tags=tags_metadata,
@@ -119,11 +119,11 @@ async def metrics_middleware(request, call_next):
         ...
     return resp
 
-@app.get("/health")
+@app.get("/health", tags=["Система"], summary="Проверка состояния", description="Возвращает статус доступности ключевых зависимостей.")
 async def health():
     return {"openai": bool(settings.openai_api_key.get_secret_value()), "neo4j": bool(settings.neo4j_uri)}
 
-@app.get("/metrics")
+@app.get("/metrics", tags=["Система"], summary="Метрики Prometheus", description="Экспорт метрик в формате, совместимом с Prometheus.")
 async def metrics():
     from prometheus_client import generate_latest
     return generate_latest()
