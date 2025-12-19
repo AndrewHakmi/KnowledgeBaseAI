@@ -48,7 +48,46 @@ except Exception:
             def __exit__(self, a, b, c): ...
         def time(self): return self._Ctx()
 
-app = FastAPI(title="Headless Knowledge Graph Platform")
+tags_metadata = [
+    {
+        "name": "Интеграция с LMS",
+        "description": "Методы для внешних систем (StudyNinja) для работы с графом: дорожная карта, адаптивные вопросы, навигация.",
+    },
+    {
+        "name": "ИИ ассистент",
+        "description": "Диалоговый интерфейс и инструменты для объяснения связей и генерации контента.",
+    },
+    {
+        "name": "Управление контентом",
+        "description": "Система заявок (Proposals) для безопасных, атомарных и проверяемых изменений графа.",
+    },
+    {
+        "name": "Аналитика",
+        "description": "Метрики структуры графа и статистика использования ИИ.",
+    },
+    {
+        "name": "Система",
+        "description": "Проверка состояния и метрики Prometheus.",
+    },
+]
+
+app = FastAPI(
+    title="KnowledgeBaseAI Engine",
+    description="""
+# Платформа KnowledgeBaseAI
+
+Ядро графовой модели знаний для экосистемы StudyNinja. Предоставляет **бестейт-сервис** работы с графом,
+который используется для адаптивного обучения и аналитики качества контента.
+
+## Ключевые принципы
+
+* **Интеграция с LMS**: используйте эндпойнты `/v1/graph/*` для построения дорожной карты и выбора вопросов.
+* **Proposals**: любые изменения графа проходят через конвейер Заявка → Ревью → Коммит (`/v1/proposals`).
+* **Мультитенантность**: `X-Tenant-ID` обязателен для записей и админ-операций; для чтения может быть по умолчанию.
+    """,
+    version="1.0.0",
+    openapi_tags=tags_metadata,
+)
 
 
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
@@ -74,9 +113,13 @@ async def tenant_middleware(request, call_next):
     set_tenant_id(tid)
     cid = request.headers.get("X-Correlation-ID") or new_correlation_id()
     set_correlation_id(cid)
+    rid = request.headers.get("X-Request-ID") or ("req-" + __import__("uuid").uuid4().hex[:8])
     resp = await call_next(request)
     try:
         resp.headers["X-Correlation-ID"] = cid
+        resp.headers["X-Request-ID"] = rid
+        if tid:
+            resp.headers["X-Tenant-ID"] = tid
     except Exception:
         ...
     return resp
@@ -93,11 +136,11 @@ async def metrics_middleware(request, call_next):
         ...
     return resp
 
-@app.get("/health")
+@app.get("/health", tags=["Система"], summary="Проверка состояния", description="Возвращает статус доступности ключевых зависимостей.")
 async def health():
     return {"openai": bool(settings.openai_api_key.get_secret_value()), "neo4j": bool(settings.neo4j_uri)}
 
-@app.get("/metrics")
+@app.get("/metrics", tags=["Система"], summary="Метрики Prometheus", description="Экспорт метрик в формате, совместимом с Prometheus.")
 async def metrics():
     from prometheus_client import generate_latest
     return generate_latest()
