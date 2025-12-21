@@ -1,6 +1,7 @@
 import asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from src.core.logging import setup_logging, logger
 from src.config.settings import settings
 from src.core.context import extract_tenant_id_from_request, set_tenant_id
@@ -64,6 +65,8 @@ tags_metadata = [
     },
 ]
 
+from src.api.common import ApiError
+
 app = FastAPI(
     title="KnowledgeBaseAI Engine",
     description="""
@@ -80,6 +83,8 @@ app = FastAPI(
     """,
     version="1.0.0",
     openapi_tags=tags_metadata,
+    contact={"name": "StudyNinja API", "url": "https://studyninja.ai", "email": "api@studyninja.ai"},
+    license_info={"name": "Proprietary"},
 )
 
 REQ_COUNTER = Counter("http_requests_total", "Total HTTP requests", ["method", "path", "status"])
@@ -101,6 +106,10 @@ async def tenant_middleware(request, call_next):
     cid = request.headers.get("X-Correlation-ID") or new_correlation_id()
     set_correlation_id(cid)
     rid = request.headers.get("X-Request-ID") or ("req-" + __import__("uuid").uuid4().hex[:8])
+    try:
+        request.state.request_id = rid
+    except Exception:
+        ...
     resp = await call_next(request)
     try:
         resp.headers["X-Correlation-ID"] = cid
@@ -122,6 +131,41 @@ async def metrics_middleware(request, call_next):
     except Exception:
         ...
     return resp
+
+def _code_for_status(status: int) -> str:
+    if status == 400: return "invalid_parameters"
+    if status == 401: return "unauthorized"
+    if status == 403: return "forbidden"
+    if status == 404: return "not_found"
+    if status == 405: return "method_not_allowed"
+    if status == 409: return "conflict"
+    if status == 422: return "validation_error"
+    if status == 502: return "upstream_error"
+    if status == 503: return "service_unavailable"
+    return "internal_error"
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    ae = ApiError(
+        code="internal_error",
+        message="Internal server error",
+        details={"error": exc.__class__.__name__},
+        request_id=getattr(request.state, "request_id", None),
+        correlation_id=get_correlation_id(),
+    )
+    return JSONResponse(status_code=500, content=ae.model_dump())
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    msg = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    ae = ApiError(
+        code=_code_for_status(exc.status_code),
+        message=msg,
+        details=None,
+        request_id=getattr(request.state, "request_id", None),
+        correlation_id=get_correlation_id(),
+    )
+    return JSONResponse(status_code=exc.status_code, content=ae.model_dump())
 
 @app.get("/health", tags=["Система"], summary="Проверка состояния", description="Возвращает статус доступности ключевых зависимостей.")
 async def health():
