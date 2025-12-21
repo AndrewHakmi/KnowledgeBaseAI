@@ -53,6 +53,20 @@ export async function getViewport(params: { center_uid: string; depth: number })
   return apiFetch<ViewportResponse>(`/v1/graph/viewport?${qs.toString()}`)
 }
 
+export type NodeDetails = {
+  uid: string
+  title?: string
+  kind?: string
+  labels?: string[]
+  incoming: Array<{ rel: string; uid: string; title?: string }>
+  outgoing: Array<{ rel: string; uid: string; title?: string }>
+  [key: string]: unknown
+}
+
+export async function getNodeDetails(uid: string) {
+  return apiFetch<NodeDetails>(`/v1/graph/node/${uid}`)
+}
+
 export type RoadmapRequest = {
   subject_uid: string | null
   progress: Record<string, number>

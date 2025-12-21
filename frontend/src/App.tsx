@@ -39,7 +39,7 @@ export default function App() {
   const navigate = useNavigate()
   const title = useActiveRouteTitle()
 
-  const [selectedUid, setSelectedUid] = useState<string>('TOP-DEMO')
+  const [selectedUid, setSelectedUid] = useState<string>('sub-math')
   const [chatOpen, setChatOpen] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -152,7 +152,7 @@ export default function App() {
             <button className="kb-btn kb-btn-primary" onClick={() => setChatOpen(true)} style={{ flex: 1 }}>
               Спросить
             </button>
-            <button className="kb-btn" onClick={() => setSelectedUid((prev) => (prev === 'TOP-DEMO' ? 'SKL-DEMO' : 'TOP-DEMO'))}>
+            <button className="kb-btn" onClick={() => setSelectedUid((prev) => (prev === 'sub-math' ? 'sub-cs' : 'sub-math'))}>
               Переключить
             </button>
           </div>
