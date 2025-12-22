@@ -1,3 +1,5 @@
+export type ThemeNodeKind = 'Subject' | 'Section' | 'Topic' | 'Skill' | 'Resource' | 'Default'
+
 export const GRAPH_THEME = {
   nodes: {
     colors: {
@@ -5,15 +7,17 @@ export const GRAPH_THEME = {
       Section: '#2ec4b6', // Teal/Blue
       Topic: '#7c5cff',   // Purple
       Skill: '#e71d36',   // Red/Pink
+      Resource: '#808080',
       Default: '#7c5cff',
-    },
+    } as Record<ThemeNodeKind, string>,
     sizes: {
       Subject: 40,
       Section: 32,
       Topic: 24,
       Skill: 18,
+      Resource: 16,
       Default: 24,
-    },
+    } as Record<ThemeNodeKind, number>,
     font: {
       size: 14,
       color: '#ffffff',
@@ -26,7 +30,7 @@ export const GRAPH_THEME = {
   },
   edges: {
     width: 1,
-    dashes: [2, 4],
+    dashes: [2, 4] as const,
     color: {
       color: 'rgba(255,255,255,0.4)',
       highlight: '#fff',

@@ -3,7 +3,8 @@ import { Network, type Edge as VisNetworkEdge, type Node as VisNetworkNode } fro
 import type { ViewportResponse } from '../api'
 import { getViewport } from '../api'
 import { NodeDetailsSidebar } from '../components/NodeDetailsSidebar'
-import { GRAPH_THEME } from '../config/graphTheme'
+import { GRAPH_THEME } from '../config/graphTheme' 
+import type { ThemeNodeKind } from '../config/graphTheme'
 import { useGraphContext } from '../context/GraphContext'
 
 type ExplorePageProps = {
@@ -11,15 +12,21 @@ type ExplorePageProps = {
   onSelectUid: (uid: string) => void
 }
 
-type VisNode = VisNetworkNode
+type VisNode = VisNetworkNode & {
+  x?: number
+  y?: number
+}
 
 type VisEdge = VisNetworkEdge
 
 function toVisData(viewport: ViewportResponse) {
   const nodes = viewport.nodes.map((n): VisNode => {
-    const kind = n.kind as keyof typeof GRAPH_THEME.nodes.colors
-    const color = GRAPH_THEME.nodes.colors[kind] || GRAPH_THEME.nodes.colors.Default
-    const size = (GRAPH_THEME.nodes.sizes as any)[kind] || GRAPH_THEME.nodes.sizes.Default
+    // Безопасное приведение типа
+    const kindKey = n.kind as ThemeNodeKind
+    const validKind = (GRAPH_THEME.nodes.colors[kindKey] ? kindKey : 'Default') as ThemeNodeKind
+    
+    const color = GRAPH_THEME.nodes.colors[validKind]
+    const size = GRAPH_THEME.nodes.sizes[validKind]
     const label = n.title || n.uid
 
     // Функция для переноса длинных слов
@@ -46,7 +53,7 @@ function toVisData(viewport: ViewportResponse) {
      return {
        id: n.uid,
        label: formatLabel(label),
-       group: n.kind,
+       group: validKind, // Используем проверенный kind
        shape: GRAPH_THEME.nodes.shape,
        size: size,
        color: {
