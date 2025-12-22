@@ -88,14 +88,6 @@ function toVisData(viewport: ViewportResponse) {
 
 export default function ExplorePage({ selectedUid, onSelectUid }: ExplorePageProps) {
   const { graphState, saveGraphState } = useGraphContext()
-  
-  // LOG: Проверяем состояние при рендере
-  console.log('[Explore] Render. GraphState:', { 
-      storedUid: graphState.selectedUid, 
-      currentUid: selectedUid, 
-      hasViewport: !!graphState.viewport,
-      hasCamera: !!graphState.camera 
-  })
 
   const [depth, setDepth] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -174,15 +166,16 @@ export default function ExplorePage({ selectedUid, onSelectUid }: ExplorePagePro
     
     // Подмешиваем сохраненные позиции из REF (не вызывает ре-рендер при обновлении)
     const savedPositions = graphStateRef.current.positions
-    console.log(graphStateRef.current.positions);
     
-    const nodes = isContextValid && savedPositions 
-      ? baseNodes.map(n => ({
-          ...n,
-          x: savedPositions[n.id as string]?.x,
-          y: savedPositions[n.id as string]?.y
-        }))
-      : baseNodes
+    let nodes = baseNodes
+    if (isContextValid && savedPositions) {
+      nodes = baseNodes.map((n) => {
+        const pos = savedPositions[n.id as string]
+        // Если позиции для узла нет, оставляем как есть (vis-network сам расставит)
+        if (!pos) return n
+        return { ...n, x: pos.x, y: pos.y }
+      })
+    }
 
     // ... options definition ...
     const options = {

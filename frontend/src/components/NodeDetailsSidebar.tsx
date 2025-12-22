@@ -7,16 +7,80 @@ type Props = {
   onAskAI: (uid: string) => void
 }
 
+// --- Sub-components ---
+
+type SidebarActionProps = {
+  label: string
+  icon?: string
+  primary?: boolean
+  onClick: () => void
+}
+
+function SidebarAction({ label, icon, primary, onClick }: SidebarActionProps) {
+  return (
+    <button
+      className={`kb-btn ${primary ? 'kb-btn-primary' : ''}`}
+      style={{ flex: 1, justifyContent: 'center' }}
+      onClick={onClick}
+    >
+      {icon && <span style={{ marginRight: 6 }}>{icon}</span>}
+      {label}
+    </button>
+  )
+}
+
+function RelationsList({ title, color, items }: { title: string; color: string; items: Array<{ rel: string; title?: string; uid: string }> }) {
+  if (items.length === 0) return null
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {items.map((rel, i) => (
+          <div key={i} className="kb-panel" style={{ padding: 8, fontSize: 12, borderRadius: 6 }}>
+            <div style={{ color: 'var(--muted)', marginBottom: 2 }}>{rel.rel}</div>
+            <div style={{ fontWeight: 500 }}>{rel.title || rel.uid}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PropertiesList({ data }: { data: NodeDetails }) {
+  const props = Object.entries(data).filter(
+    ([k]) => !['uid', 'title', 'kind', 'labels', 'incoming', 'outgoing'].includes(k),
+  )
+
+  if (props.length === 0) return null
+
+  return (
+    <div className="kb-panel" style={{ padding: 12, borderRadius: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#2ec4b6' }}>Свойства</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {props.map(([k, v]) => (
+          <div key={k} style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--muted)' }}>{k}:</span>
+            <span
+              style={{ color: '#fff', maxWidth: '60%', textAlign: 'right', wordBreak: 'break-word' }}
+            >
+              {String(v)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// --- Main Component ---
+
 export function NodeDetailsSidebar({ uid, onClose, onAskAI }: Props) {
   const [data, setData] = useState<NodeDetails | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!uid) {
-      setData(null)
-      return
-    }
+    if (!uid) return
 
     let cancelled = false
     setLoading(true)
@@ -92,57 +156,24 @@ export function NodeDetailsSidebar({ uid, onClose, onAskAI }: Props) {
             <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'monospace' }}>{data.uid}</div>
           </div>
 
-          <button
-            className="kb-btn"
-            style={{ width: '100%', justifyContent: 'center' }}
-            onClick={() => onAskAI(data.uid)}
-          >
-            ✨ Спросить AI об этом
-          </button>
-
-          <div className="kb-panel" style={{ padding: 12, borderRadius: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#2ec4b6' }}>Свойства</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {Object.entries(data)
-                .filter(([k]) => !['uid', 'title', 'kind', 'labels', 'incoming', 'outgoing'].includes(k))
-                .map(([k, v]) => (
-                  <div key={k} style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--muted)' }}>{k}:</span>
-                    <span style={{ color: '#fff', maxWidth: '60%', textAlign: 'right', wordBreak: 'break-word' }}>
-                      {String(v)}
-                    </span>
-                  </div>
-                ))}
-            </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <SidebarAction
+              label="Спросить AI"
+              icon="✨"
+              onClick={() => onAskAI(data.uid)}
+            />
+            <SidebarAction
+              label="Начать учить"
+              icon="🚀"
+              primary
+              onClick={() => alert(`Start learning ${data.title || data.uid}`)}
+            />
           </div>
 
-          {data.incoming.length > 0 && (
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#ff9f1c' }}>Входящие связи</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {data.incoming.map((rel, i) => (
-                  <div key={i} className="kb-panel" style={{ padding: 8, fontSize: 12, borderRadius: 6 }}>
-                    <div style={{ color: 'var(--muted)', marginBottom: 2 }}>{rel.rel}</div>
-                    <div style={{ fontWeight: 500 }}>{rel.title || rel.uid}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <PropertiesList data={data} />
 
-          {data.outgoing.length > 0 && (
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#7c5cff' }}>Исходящие связи</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {data.outgoing.map((rel, i) => (
-                  <div key={i} className="kb-panel" style={{ padding: 8, fontSize: 12, borderRadius: 6 }}>
-                    <div style={{ color: 'var(--muted)', marginBottom: 2 }}>{rel.rel}</div>
-                    <div style={{ fontWeight: 500 }}>{rel.title || rel.uid}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <RelationsList title="Входящие связи" color="#ff9f1c" items={data.incoming} />
+          <RelationsList title="Исходящие связи" color="#7c5cff" items={data.outgoing} />
         </>
       )}
     </div>
