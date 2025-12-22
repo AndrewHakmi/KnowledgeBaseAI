@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { DataSet } from 'vis-data'
 import { Network, type Edge as VisNetworkEdge, type Node as VisNetworkNode } from 'vis-network'
 import type { ViewportResponse } from '../api'
 import { getViewport } from '../api'
 import { NodeDetailsSidebar } from '../components/NodeDetailsSidebar'
+import { GRAPH_THEME } from '../config/graphTheme'
+import { useGraphContext } from '../context/GraphContext'
 
 type ExplorePageProps = {
   selectedUid: string
@@ -16,24 +17,10 @@ type VisEdge = VisNetworkEdge
 
 function toVisData(viewport: ViewportResponse) {
   const nodes = viewport.nodes.map((n): VisNode => {
-    // Style based on hierarchy (Kind)
-    let color = '#7c5cff' // Default Purple
-    let size = 24
-    let label = n.title || n.uid
-
-    if (n.kind === 'Subject') {
-      color = '#ff9f1c' // Orange/Gold
-      size = 40
-    } else if (n.kind === 'Section') {
-      color = '#2ec4b6' // Teal/Blue
-      size = 32
-    } else if (n.kind === 'Topic') {
-      color = '#7c5cff' // Purple
-      size = 24
-    } else if (n.kind === 'Skill') {
-      color = '#e71d36' // Red/Pink
-      size = 18
-    }
+    const kind = n.kind as keyof typeof GRAPH_THEME.nodes.colors
+    const color = GRAPH_THEME.nodes.colors[kind] || GRAPH_THEME.nodes.colors.Default
+    const size = (GRAPH_THEME.nodes.sizes as any)[kind] || GRAPH_THEME.nodes.sizes.Default
+    const label = n.title || n.uid
 
     // Функция для переноса длинных слов
      const formatLabel = (text: string) => {
@@ -60,7 +47,7 @@ function toVisData(viewport: ViewportResponse) {
        id: n.uid,
        label: formatLabel(label),
        group: n.kind,
-       shape: 'hexagon',
+       shape: GRAPH_THEME.nodes.shape,
        size: size,
        color: {
          background: color,
@@ -68,10 +55,12 @@ function toVisData(viewport: ViewportResponse) {
          highlight: { background: '#ffffff', border: color },
        },
        font: {
-          size: 14,
-          color: '#ffffff',
+          size: GRAPH_THEME.nodes.font.size,
+          color: GRAPH_THEME.nodes.font.color,
+          strokeWidth: GRAPH_THEME.nodes.font.strokeWidth,
+          strokeColor: GRAPH_THEME.nodes.font.strokeColor,
           multi: true,
-          vadjust: size * 0.8,
+          vadjust: size * GRAPH_THEME.nodes.font.vadjustRatio,
         }
       }
     })
@@ -81,26 +70,34 @@ function toVisData(viewport: ViewportResponse) {
     from: e.source,
     to: e.target,
     // label: undefined,
-    color: { color: 'rgba(255,255,255,0.4)', highlight: '#fff', opacity: 0.4 },
-    dashes: [2, 4],
-    width: 1,
-    arrows: { to: { enabled: true, scaleFactor: 0.4, type: 'arrow' } }
+    color: GRAPH_THEME.edges.color,
+    dashes: [...GRAPH_THEME.edges.dashes],
+    width: GRAPH_THEME.edges.width,
+    arrows: { to: { enabled: true, scaleFactor: GRAPH_THEME.edges.arrows.scaleFactor, type: 'arrow' } }
   }))
 
   return { nodes, edges }
 }
 
-export default function ExplorePage(props: ExplorePageProps) {
-  const { selectedUid, onSelectUid } = props
-
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const networkRef = useRef<Network | null>(null)
+export default function ExplorePage({ selectedUid, onSelectUid }: ExplorePageProps) {
+  const { graphState, saveGraphState } = useGraphContext()
+  
+  // LOG: Проверяем состояние при рендере
+  console.log('[Explore] Render. GraphState:', { 
+      storedUid: graphState.selectedUid, 
+      currentUid: selectedUid, 
+      hasViewport: !!graphState.viewport,
+      hasCamera: !!graphState.camera 
+  })
 
   const [depth, setDepth] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [viewport, setViewport] = useState<ViewportResponse | null>(null)
   
+  // Если данные в контексте актуальны для текущего узла, используем их
+  const isContextValid = graphState.selectedUid === selectedUid && graphState.viewport
+  const viewport = isContextValid ? graphState.viewport : null
+
   // State for sidebar
   const [detailsUid, setDetailsUid] = useState<string | null>(null)
   
@@ -110,76 +107,136 @@ export default function ExplorePage(props: ExplorePageProps) {
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 })
 
   const visData = useMemo(() => {
-    if (!viewport) return null
+    if (!viewport) return { nodes: [], edges: [] }
     return toVisData(viewport)
   }, [viewport])
 
+  const containerRef = useRef<HTMLDivElement>(null)
+  const networkRef = useRef<Network | null>(null)
+  const cameraRef = useRef<{position: {x: number, y: number}, scale: number} | null>(null)
+  
+  // Ref to access latest graphState inside useEffect without triggering re-run
+  const graphStateRef = useRef(graphState)
   useEffect(() => {
+    graphStateRef.current = graphState
+  }, [graphState])
+
+  // Fetch data only if context is invalid (empty or different node)
+  useEffect(() => {
+    // Сбрасываем тултип при смене графа
+    setHoveredNode(null)
+    
+    if (isContextValid) return // Уже есть данные
+
     let cancelled = false
+    setLoading(true)
+    setError(null)
 
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await getViewport({ center_uid: props.selectedUid, depth })
+    getViewport({ center_uid: selectedUid, depth })
+      .then((res) => {
         if (cancelled) return
-        setViewport(data)
-      } catch (e) {
+        // Сохраняем в контекст
+        saveGraphState({ 
+          viewport: res, 
+          selectedUid: selectedUid,
+          camera: null // Reset camera on new node
+        })
+      })
+      .catch((err) => {
         if (cancelled) return
-        setError(e instanceof Error ? e.message : 'Ошибка загрузки viewport')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    void load()
+        setError(err.message)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
 
     return () => {
       cancelled = true
     }
-  }, [props.selectedUid, depth])
+  }, [selectedUid, depth, isContextValid, saveGraphState])
 
   useEffect(() => {
+    if (!containerRef.current || !viewport) return
+    
+    // Сбрасываем тултип перед созданием новой сети
+    setHoveredNode(null)
+
     const el = containerRef.current
-    if (!el || !visData) return
+    const { nodes: baseNodes, edges } = visData
+    
+    // Подмешиваем сохраненные позиции из REF (не вызывает ре-рендер при обновлении)
+    const savedPositions = graphStateRef.current.positions
+    console.log(graphStateRef.current.positions);
+    
+    const nodes = isContextValid && savedPositions 
+      ? baseNodes.map(n => ({
+          ...n,
+          x: savedPositions[n.id as string]?.x,
+          y: savedPositions[n.id as string]?.y
+        }))
+      : baseNodes
 
-    const nodes = new DataSet(visData.nodes)
-    const edges = new DataSet(visData.edges)
-
-    const network = new Network(
-      el,
-      { nodes, edges },
-      {
-        autoResize: true,
-        interaction: {
-          hover: true,
-          multiselect: false,
-          navigationButtons: false,
-        },
-        physics: {
-          enabled: true,
-          solver: 'forceAtlas2Based',
-          forceAtlas2Based: {
-            gravitationalConstant: -100, // Сильнее отталкивание
-            centralGravity: 0.005,
-            springLength: 200, // Длиннее связи, чтобы было место для стрелок
-            springConstant: 0.05,
-          },
-          stabilization: { iterations: 250 },
-        },
-        nodes: {
-          // Defaults overridden by individual nodes
-          shape: 'hexagon',
-          font: { color: '#ffffff', size: 14, face: 'ui-sans-serif' },
-          borderWidth: 2,
-        },
-        edges: {
-          width: 1,
-          dashes: true, // Включаем пунктир глобально
-          smooth: { enabled: true, type: 'continuous', roundness: 0.5 },
-        },
+    // ... options definition ...
+    const options = {
+      autoResize: true,
+      interaction: {
+        hover: true,
+        multiselect: false,
+        navigationButtons: false,
       },
-    )
+      physics: {
+        enabled: true,
+        solver: 'forceAtlas2Based',
+        forceAtlas2Based: {
+          gravitationalConstant: GRAPH_THEME.physics.gravitationalConstant,
+          centralGravity: GRAPH_THEME.physics.centralGravity,
+          springLength: GRAPH_THEME.physics.springLength,
+          springConstant: GRAPH_THEME.physics.springConstant,
+        },
+        stabilization: {
+             // Если мы восстанавливаем граф, мы не хотим, чтобы он двигал узлы (enabled: false)
+             enabled: !isContextValid,
+             iterations: GRAPH_THEME.physics.stabilizationIterations,
+             fit: false, // Никогда не делать авто-зум, мы сами управляем камерой
+         },
+      },
+      nodes: {
+        shape: GRAPH_THEME.nodes.shape,
+        font: { color: '#ffffff', size: 14, face: 'ui-sans-serif' },
+        borderWidth: GRAPH_THEME.nodes.borderWidth,
+      },
+      edges: {
+        width: GRAPH_THEME.edges.width,
+        dashes: [...GRAPH_THEME.edges.dashes],
+        smooth: { enabled: true, type: 'continuous', roundness: 0.5 },
+      },
+    }
+
+    const network = new Network(el, { nodes, edges }, options)
+    
+    let isMounted = true
+
+    // Восстанавливаем камеру из REF (не триггерит эффект)
+    const savedCamera = graphStateRef.current.camera
+    console.log('[Explore] Init Network. Saved camera:', savedCamera, 'Context valid:', isContextValid)
+    
+    if (savedCamera && isContextValid) {
+      // Инициализируем ref сразу, чтобы при быстром уходе он не был null
+      cameraRef.current = savedCamera
+
+      console.log('[Explore] Restoring camera position...')
+      // Используем setTimeout, чтобы дать vis-network инициализироваться перед сдвигом камеры
+      setTimeout(() => {
+        if (!isMounted) return 
+        console.log('[Explore] MOVING CAMERA NOW to:', savedCamera.position)
+        network.moveTo({
+          position: savedCamera.position,
+          scale: savedCamera.scale,
+          animation: { duration: 300, easingFunction: 'easeInOutQuad' }, // Плавная анимация восстановления
+        })
+      }, 50) // Чуть уменьшил, так как анимация сгладит рывки
+    }
 
     network.on('selectNode', (params) => {
       const id = params.nodes?.[0]
@@ -209,25 +266,56 @@ export default function ExplorePage(props: ExplorePageProps) {
       setHoveredNode(null)
     })
 
+    // Track camera changes
+    const updateCameraRef = () => {
+        cameraRef.current = {
+            position: network.getViewPosition(),
+            scale: network.getScale()
+        }
+    }
+    network.on('dragEnd', updateCameraRef)
+    network.on('zoom', updateCameraRef)
+    network.on('stabilized', updateCameraRef)
+    network.on('animationFinished', updateCameraRef) // Обновляем камеру после программной анимации (moveTo)
+
     networkRef.current = network
 
     return () => {
+      isMounted = false // Предотвращаем выполнение отложенных задач
+      // Сохраняем позицию камеры перед уничтожением
+      // Используем последнее известное положение из ref, если оно есть, иначе пытаемся взять у network
+      const lastKnownCamera = cameraRef.current || { position: network.getViewPosition(), scale: network.getScale() }
+      const positions = network.getPositions() // Получаем позиции узлов
+      
+      console.log('[Explore] Unmounting. Saving camera:', lastKnownCamera)
+      
+      saveGraphState({
+        camera: lastKnownCamera,
+        positions: positions, // Сохраняем позиции
+      })
       network.destroy()
       networkRef.current = null
     }
-  }, [visData, onSelectUid])
+  }, [visData, onSelectUid, isContextValid, saveGraphState]) // Убрал graphState.camera из зависимостей!
 
+  // Focus effect
   useEffect(() => {
     const network = networkRef.current
     if (!network) return
     
-    // Check if node exists before selecting to avoid RangeError
+    // Используем REF для проверки камеры
+    if (graphStateRef.current.camera && isContextValid) {
+        console.log('[Explore] Skipping focus because camera is restored')
+        return
+    }
+
+    console.log('[Explore] Focusing on node (default behavior)')
     const allNodes = network.body.data.nodes
     if (!allNodes.get(selectedUid)) return
 
     network.selectNodes([selectedUid])
     network.focus(selectedUid, { scale: 1.1, animation: { duration: 350, easingFunction: 'easeInOutQuad' } })
-  }, [selectedUid])
+  }, [selectedUid, isContextValid])
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -327,12 +415,12 @@ export default function ExplorePage(props: ExplorePageProps) {
           <div
             style={{
               position: 'absolute',
-              left: cursorPos.x + 20, // Смещение вправо
-              top: cursorPos.y + 20,  // Смещение вниз (чтобы не перекрывать курсор)
+              left: cursorPos.x + GRAPH_THEME.tooltip.offset, // Смещение вправо
+              top: cursorPos.y + GRAPH_THEME.tooltip.offset,  // Смещение вниз
               pointerEvents: 'none',
-              background: 'rgba(20, 20, 30, 0.9)',
+              background: GRAPH_THEME.tooltip.background,
               backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: `1px solid ${GRAPH_THEME.tooltip.borderColor}`,
               padding: '12px',
               borderRadius: '8px',
               zIndex: 100,
