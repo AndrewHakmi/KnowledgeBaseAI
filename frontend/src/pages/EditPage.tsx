@@ -43,6 +43,7 @@ export default function EditPage(props: EditPageProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(props.selectedUid || null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [canSave, setCanSave] = useState(false);
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId) || null, [nodes, selectedNodeId])
   const selectedEdge = useMemo(() => edges.find((e) => e.id === selectedEdgeId) || null, [edges, selectedEdgeId])
 
@@ -67,11 +68,12 @@ export default function EditPage(props: EditPageProps) {
                   data: { label: id },
                 },
               ])
+              setCanSave(true)
             }}
           >
             Добавить узел
           </button>
-          <button className="kb-btn kb-btn-primary" onClick={() => void 0}>
+          <button className="kb-btn kb-btn-primary" onClick={() => {void 0;setCanSave(false)}} disabled={!canSave}>
             Сохранить
           </button>
         </div>
