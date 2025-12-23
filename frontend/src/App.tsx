@@ -8,10 +8,7 @@ import RoadmapPage from './pages/RoadmapPage'
 import SettingsPage from './pages/SettingsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import { assistantChat, type AssistantAction } from './api'
-import { type RootState } from './store'
-import { setSelectedUid, toggleChat, addMessage } from './store/appSlice'
-import { addTransaction, markSuccess, markFailed } from './store/transactionsSlice'
-import ThemeToggle from './components/ThemeToggle'
+import { APP_CONFIG } from './config/appConfig'
 
 type ChatMessage = {
   id: string
@@ -44,8 +41,8 @@ export default function App() {
   const dispatch = useDispatch()
   const title = useActiveRouteTitle()
 
-  const { selectedUid, messages, isChatOpen } = useSelector((state: RootState) => state.app)
-
+  const [selectedUid, setSelectedUid] = useState<string>(APP_CONFIG.defaultStartNode)
+  const [chatOpen, setChatOpen] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [action, setAction] = useState<AssistantAction | undefined>(undefined)
 
@@ -131,8 +128,12 @@ export default function App() {
             <div style={{ fontWeight: 600 }}>{selectedUid}</div>
           </div>
           <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-            <button className="kb-btn kb-btn-primary" onClick={() => dispatch(toggleChat())} style={{ flex: 1 }}>Спросить</button>
-            <button className="kb-btn" onClick={() => dispatch(setSelectedUid(selectedUid === 'TOP-DEMO' ? 'SKL-DEMO' : 'TOP-DEMO'))}>Переключить</button>
+            <button className="kb-btn kb-btn-primary" onClick={() => setChatOpen(true)} style={{ flex: 1 }}>
+              Спросить
+            </button>
+            <button className="kb-btn" onClick={() => setSelectedUid((prev) => (prev === APP_CONFIG.defaultStartNode ? 'sub-cs' : APP_CONFIG.defaultStartNode))}>
+              Переключить
+            </button>
           </div>
         </div>
 

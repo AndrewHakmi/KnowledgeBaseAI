@@ -18,38 +18,7 @@ export default function EditPage(props: EditPageProps) {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(props.selectedUid || null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (nodes.length === 0) {
-      const initialNodes: Node[] = [
-        {
-          id: props.selectedUid,
-          position: { x: 0, y: 0 },
-          data: { label: props.selectedUid },
-          type: 'default',
-        },
-        {
-          id: 'SKL-DEMO',
-          position: { x: 240, y: 120 },
-          data: { label: 'SKL-DEMO' },
-          type: 'default',
-        },
-      ]
-
-      const initialEdges = [
-        {
-          id: `${props.selectedUid}->SKL-DEMO`,
-          source: props.selectedUid,
-          target: 'SKL-DEMO',
-          label: 'USES_SKILL',
-          animated: true,
-          style: { stroke: 'rgba(46, 233, 166, 0.8)' },
-        },
-      ]
-      dispatch(actions.setGraph({ nodes: initialNodes, edges: initialEdges }))
-    }
-  }, [props.selectedUid, nodes.length, dispatch])
-
+  const [canSave, setCanSave] = useState(false);
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId) || null, [nodes, selectedNodeId])
   const selectedEdge = useMemo(() => edges.find((e) => e.id === selectedEdgeId) || null, [edges, selectedEdgeId])
 
@@ -66,16 +35,20 @@ export default function EditPage(props: EditPageProps) {
             className="kb-btn"
             onClick={() => {
               const id = `NEW-${Date.now().toString(16)}`
-              dispatch(actions.addNode({
-                id,
-                position: { x: 120 + nodes.length * 30, y: 120 + nodes.length * 20 },
-                data: { label: id },
-              }))
+              setNodes((prev) => [
+                ...prev,
+                {
+                  id,
+                  position: { x: 120 + prev.length * 30, y: 120 + prev.length * 20 },
+                  data: { label: id },
+                },
+              ])
+              setCanSave(true)
             }}
           >
             Добавить узел
           </button>
-          <button className="kb-btn kb-btn-primary" onClick={() => void 0}>
+          <button className="kb-btn kb-btn-primary" onClick={() => {void 0;setCanSave(false)}} disabled={!canSave}>
             Сохранить
           </button>
         </div>

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional
-from src.services.graph.neo4j_repo import relation_context, neighbors
+from src.services.graph.neo4j_repo import relation_context, neighbors, get_node_details
 from src.config.settings import settings
 from src.services.roadmap_planner import plan_route
 from src.services.questions import select_examples_for_topics, all_topic_uids_from_examples
@@ -42,17 +42,14 @@ class ViewportResponse(BaseModel):
         }
     }
 
-@router.get(
-    "/viewport",
-    summary="Окрестность узла",
-    description="Возвращает локальный подграф (узлы и связи) вокруг указанного узла. Используется для визуализации графа.",
-    response_model=ViewportResponse,
-    responses={
-        400: {"model": ApiError, "description": "Некорректные параметры запроса"},
-        404: {"model": ApiError, "description": "Узел не найден"},
-        500: {"model": ApiError, "description": "Внутренняя ошибка сервера"},
-    },
-)
+@router.get("/node/{uid}")
+async def get_node(uid: str) -> Dict:
+    data = get_node_details(uid)
+    if not data:
+        raise HTTPException(status_code=404, detail="Node not found")
+    return data
+
+@router.get("/viewport")
 async def viewport(center_uid: str, depth: int = 1) -> Dict:
     """
     Принимает:

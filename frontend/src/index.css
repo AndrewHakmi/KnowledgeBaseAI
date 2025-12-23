@@ -86,7 +86,11 @@ button {
 .kb-btn-primary:hover {
   background: rgba(124, 92, 255, 0.26);
 }
-
+.kb-btn-primary:disabled{
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  cursor: default;
+}
 .kb-input {
   width: 100%;
   border: 1px solid var(--border);
