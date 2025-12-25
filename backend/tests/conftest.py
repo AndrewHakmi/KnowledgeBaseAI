@@ -1,11 +1,30 @@
-import os
-import pytest
+import warnings, pytest
+warnings.filterwarnings("ignore")
+from src.db.pg import get_conn, ensure_tables
+from src.events.publisher import get_redis
+from src.services.graph.neo4j_repo import get_driver
 
 @pytest.fixture(autouse=True)
-def test_env(monkeypatch):
-    monkeypatch.setenv('APP_ENV', 'dev')
-    monkeypatch.setenv('OPENAI_API_KEY', 'test')
-    monkeypatch.setenv('NEO4J_URI', os.getenv('NEO4J_URI',''))
-    monkeypatch.setenv('NEO4J_USER', os.getenv('NEO4J_USER',''))
-    monkeypatch.setenv('NEO4J_PASSWORD', os.getenv('NEO4J_PASSWORD',''))
-    monkeypatch.setenv('PG_DSN', os.getenv('PG_DSN',''))
+def _clean_db():
+    ensure_tables()
+    conn = get_conn(); conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM events_outbox")
+        cur.execute("DELETE FROM proposals")
+        cur.execute("DELETE FROM audit_log")
+        cur.execute("DELETE FROM graph_changes")
+        cur.execute("DELETE FROM tenant_graph_version")
+    conn.close()
+    try:
+        r = get_redis()
+        r.delete("events:graph_committed")
+    except Exception:
+        ...
+    try:
+        drv = get_driver()
+        with drv.session() as s:
+            s.run("MATCH (n) DETACH DELETE n")
+        drv.close()
+    except Exception:
+        ...
+    yield
