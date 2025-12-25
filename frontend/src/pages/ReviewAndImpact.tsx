@@ -21,7 +21,7 @@ export function ReviewAndImpact({ proposalId }: { proposalId: string }) {
           onChange: e => setTypes(e.currentTarget.value.split(",").map(x => x.trim()).filter(Boolean))
         })
       ),
-      React.createElement(ImpactGraph, { proposalId, depth: 1, types })
+      React.createElement(ImpactGraph, { proposalId, depth: 1, types, selectedUids })
     )
   )
 }

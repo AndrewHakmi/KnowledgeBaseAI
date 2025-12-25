@@ -9,7 +9,7 @@ async function fetchImpact(proposalId: string, depth: number): Promise<{ nodes: 
   return res.json()
 }
 
-export function ImpactGraph({ proposalId, depth = 1, types }: { proposalId: string; depth?: number; types?: string[] }) {
+export function ImpactGraph({ proposalId, depth = 1, types, selectedUids }: { proposalId: string; depth?: number; types?: string[]; selectedUids?: string[] }) {
   const [nodes, setNodes] = useState<NodeItem[]>([])
   const [edges, setEdges] = useState<EdgeItem[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +40,11 @@ export function ImpactGraph({ proposalId, depth = 1, types }: { proposalId: stri
         "div",
         { style: { flex: 1 } },
         React.createElement("h4", null, "Nodes"),
-        React.createElement("ul", null, nodes.map((n, i) => React.createElement("li", { key: i }, `${n.uid} ${n.name ? "(" + n.name + ")" : ""} ${n.type ? "[" + n.type + "]" : ""}`)))
+        React.createElement("ul", null, nodes.map((n, i) => {
+          const isSel = (selectedUids || []).includes(String(n.uid))
+          const label = `${n.uid} ${n.name ? "(" + n.name + ")" : ""} ${n.type ? "[" + n.type + "]" : ""}`
+          return React.createElement("li", { key: i, style: { fontWeight: isSel ? "bold" : "normal" } }, label)
+        }))
       ),
       React.createElement(
         "div",
