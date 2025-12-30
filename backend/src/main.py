@@ -1,5 +1,7 @@
 import asyncio
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from src.core.logging import setup_logging, logger
@@ -88,10 +90,6 @@ app = FastAPI(
 )
 
 
-app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(Exception, global_exception_handler)
-
 
 REQ_COUNTER = Counter("http_requests_total", "Total HTTP requests", ["method", "path", "status"])
 LATENCY = Histogram("http_request_latency_ms", "Request latency ms", ["method", "path"])
@@ -172,6 +170,17 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         correlation_id=get_correlation_id(),
     )
     return JSONResponse(status_code=exc.status_code, content=ae.model_dump())
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    ae = ApiError(
+        code="validation_error",
+        message="Validation failed",
+        details={"errors": exc.errors()},
+        request_id=getattr(request.state, "request_id", None),
+        correlation_id=get_correlation_id(),
+    )
+    return JSONResponse(status_code=422, content=ae.model_dump())
 
 @app.get("/health", tags=["Система"], summary="Проверка состояния", description="Возвращает статус доступности ключевых зависимостей.")
 async def health():
